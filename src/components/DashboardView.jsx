@@ -148,7 +148,7 @@ function DashboardView({ members, events, attendance, theme }) {
         {[
           { label: "Total Members", value: total, sub: `${active} active`, color: theme.accent, icon: "members" },
           { label: "Today's Attendance", value: todayAtt, sub: todayEvent?.name || "No active event", color: theme.success, icon: "check" },
-          { label: "All-time Records", value: attendance.length, sub: "Attendance entries", color: theme.accent2, icon: "analytics" },
+          { label: "All-time Records ✨", value: attendance.length, sub: "Attendance entries", color: theme.accent2, icon: "analytics" },
           { label: "Upcoming Events", value: events.filter(e => e.status === "Upcoming").length, sub: "Scheduled", color: theme.warning, icon: "events" },
         ].map((s, i) => (
           <div key={i} className="card" style={{ position: "relative", background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 13, padding: 18, paddingRight: 60, animationDelay: `${i * .08}s` }}>
