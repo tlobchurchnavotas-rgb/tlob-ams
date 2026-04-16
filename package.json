@@ -1,0 +1,87 @@
+{
+  "name": "tlob-church-attendance",
+  "version": "1.0.0",
+  "description": "The Lord Our Banner Christian Church - Attendance Management System",
+  "main": "electron/main.js",
+  "private": true,
+  "dependencies": {
+    "@supabase/supabase-js": "^2.102.0",
+    "electron-updater": "^7.0.0",
+    "qrcode": "^1.5.4",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-scripts": "5.0.1"
+  },
+  "scripts": {
+    "postinstall": "node tools/generate-electron-assets.js",
+    "start": "react-scripts start",
+    "start:lan": "cross-env HOST=0.0.0.0 react-scripts start",
+    "start:https": "cross-env HTTPS=true react-scripts start",
+    "start:lan:https": "cross-env HOST=0.0.0.0 HTTPS=true react-scripts start",
+    "build": "cross-env PUBLIC_URL=. react-scripts build",
+    "assets:electron": "node tools/generate-electron-assets.js",
+    "electron:dev": "concurrently -k -n REACT,ELECTRON -c cyan,magenta \"npm start\" \"wait-on http://localhost:3000 && cross-env ELECTRON_START_URL=http://localhost:3000 electron .\"",
+    "electron:pack": "npm run assets:electron && npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir",
+    "electron:dist": "npm run assets:electron && npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "cross-env": "^7.0.3",
+    "electron": "^36.4.0",
+    "electron-builder": "^26.0.12",
+    "png-to-ico": "^2.1.8",
+    "wait-on": "^8.0.4"
+  },
+  "build": {
+    "appId": "com.tlob.ams",
+    "productName": "TLOB AMS",
+    "directories": {
+      "buildResources": "build-resources",
+      "output": "dist"
+    },
+    "files": [
+      "build/**/*",
+      "electron/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "publish": {
+      "provider": "github",
+      "owner": "tlobchurchnavotas-rgb",
+      "repo": "tlob-ams"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build-resources/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "TLOB AMS"
+    }
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}
