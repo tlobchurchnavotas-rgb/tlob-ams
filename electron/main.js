@@ -38,8 +38,25 @@ function createMainWindow() {
 
   win.once("ready-to-show", () => win.show());
 
-  // Open external links in the system browser.
+  // Allow in-app print/popups (about:blank/data/blob/local files), but open true externals in browser.
   win.webContents.setWindowOpenHandler(({ url }) => {
+    const isInternalPopup =
+      url === "about:blank" ||
+      url.startsWith("data:") ||
+      url.startsWith("blob:") ||
+      url.startsWith("file://") ||
+      url.startsWith("http://localhost");
+
+    if (isInternalPopup) {
+      return {
+        action: "allow",
+        overrideBrowserWindowOptions: {
+          autoHideMenuBar: true,
+          show: true,
+        },
+      };
+    }
+
     shell.openExternal(url);
     return { action: "deny" };
   });
@@ -90,9 +107,13 @@ autoUpdater.on("update-downloaded", (info) => {
 // IPC handlers for update checking
 ipcMain.handle("check-for-updates", async () => {
   try {
+    console.log("Checking for updates...");
+    console.log("Current App Version:", app.getVersion());
     const result = await autoUpdater.checkForUpdates();
+    console.log("Update check result:", result);
     return result;
   } catch (error) {
+    console.error("Update check error:", error);
     return { updateAvailable: false, error: error.message };
   }
 });

@@ -215,6 +215,32 @@ npm run electron:dist
 npm run electron:pack
 ```
 
+### Publish auto-updates via GitHub Releases (recommended)
+
+This project uses a safer two-step workflow:
+- pushing a version tag (`v*`) creates a **draft** GitHub Release with installer/update assets
+- you manually publish that draft when you are ready for public rollout
+
+1. Update app version in `package.json`:
+
+```bash
+npm version patch
+```
+
+Use `minor` or `major` when needed.
+
+2. Push commit and tag to GitHub:
+
+```bash
+git push && git push --tags
+```
+
+3. GitHub Actions runs `.github/workflows/release.yml` and creates a **draft** release for that tag with installer/update assets.
+
+4. When you are ready, run `.github/workflows/publish-draft-release.yml` from the Actions tab and enter the tag (example: `v1.0.2`).
+
+5. After publishing the draft, installed app clients can fetch the update through the built-in updater.
+
 ---
 
 ## 📝 Data Storage
