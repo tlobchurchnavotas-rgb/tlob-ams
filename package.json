@@ -1,6 +1,6 @@
 {
   "name": "tlob-church-attendance",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "The Lord Our Banner Christian Church - Attendance Management System",
   "main": "electron/main.js",
   "private": true,
