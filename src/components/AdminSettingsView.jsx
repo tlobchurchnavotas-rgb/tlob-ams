@@ -163,7 +163,7 @@ export default function AdminSettingsView({ theme, showNotif, currentUser, setCu
     return () => {
       // Cleanup listeners if needed
     };
-  }, []);
+  }, [showNotif]);
 
   const save = async () => {
     const err = validate();
