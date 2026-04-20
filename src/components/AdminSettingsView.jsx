@@ -128,10 +128,11 @@ export default function AdminSettingsView({ theme, showNotif, currentUser, setCu
     setCheckingUpdates(true);
     try {
       const result = await window.tlob.checkForUpdates();
+      if (result?.error) throw new Error(result.error);
       if (result?.updateAvailable) {
-        showNotif(`Update available! Version ${result.updateInfo?.version || "unknown"}. The app will download and install it automatically.`, "success");
+        showNotif(`Update available! Version ${result.updateInfo?.version || "unknown"} is downloading in the background.`, "success");
       } else {
-        showNotif("You're already using the latest version.", "info");
+        showNotif(`You're already using the latest version (${result?.currentVersion || "current"}).`, "info");
       }
     } catch (error) {
       showNotif(`Error checking for updates: ${error?.message || "Unknown error"}`, "error");

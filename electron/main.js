@@ -7,7 +7,7 @@ let mainWindow = null;
 
 // Configure auto-updater
 autoUpdater.checkForUpdatesAndNotify = false; // We'll handle notifications manually
-autoUpdater.autoDownload = false; // Don't auto-download, let user decide
+autoUpdater.autoDownload = true; // Auto-download once update is found
 autoUpdater.autoInstallOnAppQuit = true; // Install update when app quits
 
 function resolveAssetPath(...parts) {
@@ -108,13 +108,20 @@ autoUpdater.on("update-downloaded", (info) => {
 ipcMain.handle("check-for-updates", async () => {
   try {
     console.log("Checking for updates...");
-    console.log("Current App Version:", app.getVersion());
+    const currentVersion = app.getVersion();
+    console.log("Current App Version:", currentVersion);
     const result = await autoUpdater.checkForUpdates();
     console.log("Update check result:", result);
-    return result;
+    const latestVersion = result?.updateInfo?.version || null;
+    const updateAvailable = Boolean(latestVersion && latestVersion !== currentVersion);
+    return {
+      updateAvailable,
+      currentVersion,
+      updateInfo: result?.updateInfo || null,
+    };
   } catch (error) {
     console.error("Update check error:", error);
-    return { updateAvailable: false, error: error.message };
+    return { updateAvailable: false, error: error.message, currentVersion: app.getVersion() };
   }
 });
 
