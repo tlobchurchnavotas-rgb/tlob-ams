@@ -6,17 +6,56 @@ import { recordAuditLog } from "../auditLogs.js";
 
 
 // ─── EVENTS VIEW ──────────────────────────────────────────────────────────────
-function EventsView({ events, setEvents, attendance, members, theme, showNotif, currentUser }) {
+function EventsView({ events, setEvents, attendance, setAttendance, members, theme, showNotif, currentUser }) {
   const [showModal, setShowModal] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [showEditTemplate, setShowEditTemplate] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState(null);
+  const [templateForm, setTemplateForm] = useState({ name: "", type: "Weekly Service", time: "" });
+  const [templates, setTemplates] = useState(EVENT_TEMPLATES);
   const [form, setForm] = useState({ name: "", type: "Weekly Service", date: "", time: "", status: "Upcoming" });
   const [editEvent, setEditEvent] = useState(null); // null | event row
   const [searchQuery, setSearchQuery] = useState("");
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
   const [selectedEventForAttendance, setSelectedEventForAttendance] = useState(null);
   const [attendanceSearchQuery, setAttendanceSearchQuery] = useState("");
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+  const [templateToDelete, setTemplateToDelete] = useState(null);
 
   const applyTemplate = t => { setForm(f => ({ ...f, name: t.name, type: t.type, time: t.time })); setShowTemplates(false); setShowModal(true); };
+
+  const openEditTemplate = (t, idx) => {
+    setEditingTemplate(idx);
+    setTemplateForm({ name: t.name, type: t.type, time: t.time });
+    setShowEditTemplate(true);
+  };
+
+  const handleSaveTemplate = () => {
+    if (!templateForm.name || !templateForm.type || !templateForm.time) {
+      showNotif("Please fill all fields", "error");
+      return;
+    }
+    const updated = [...templates];
+    updated[editingTemplate] = templateForm;
+    setTemplates(updated);
+    showNotif("Template updated");
+    setShowEditTemplate(false);
+    setEditingTemplate(null);
+  };
+
+  const deleteTemplate = (idx) => {
+    setTemplateToDelete(idx);
+    setShowConfirmDelete(true);
+  };
+
+  const confirmDeleteTemplate = () => {
+    if (templateToDelete !== null) {
+      setTemplates(prev => prev.filter((_, i) => i !== templateToDelete));
+      showNotif("Template deleted");
+      setShowConfirmDelete(false);
+      setTemplateToDelete(null);
+    }
+  };
 
   const handleAdd = async () => {
     if (!form.name || !form.date) return;
@@ -139,11 +178,17 @@ function EventsView({ events, setEvents, attendance, members, theme, showNotif, 
   );
 
   const getAttendanceCount = (eventId) => {
-    return attendance.filter(a => a.eventId === eventId).length;
+    // Validation filter: ensure events exist before counting
+    const validEventIds = new Set(events.map(e => e.id));
+    return attendance.filter(a => a.eventId === eventId && validEventIds.has(a.eventId)).length;
   };
 
   const getAttendanceRecords = (eventId) => {
-    const eventAttendance = attendance.filter(a => a.eventId === eventId);
+    // Validation filter: only include records with valid eventId and memberId
+    const validMemberIds = new Set(members.map(m => m.id));
+    const eventAttendance = attendance.filter(a => 
+      a.eventId === eventId && validMemberIds.has(a.memberId)
+    );
     return eventAttendance.map(record => {
       const member = members.find(m => m.id === record.memberId);
       return {
@@ -159,6 +204,25 @@ function EventsView({ events, setEvents, attendance, members, theme, showNotif, 
     setSelectedEventForAttendance(event);
     setAttendanceSearchQuery("");
     setShowAttendanceModal(true);
+  };
+
+  const deleteAttendanceRecord = async (recordId) => {
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this attendance record? This cannot be undone."
+    );
+    if (!confirmed) return;
+
+    setAttendance(prev => prev.filter(a => a.id !== recordId));
+    showNotif("Attendance record deleted", "warning");
+    try {
+      await recordAuditLog({
+        actor: currentUser,
+        action: "attendance_deleted",
+        target: recordId,
+        source: "events",
+        metadata: { eventId: selectedEventForAttendance?.id, recordId },
+      });
+    } catch {}
   };
 
   const getFilteredAttendanceRecords = (eventId, searchTerm) => {
@@ -267,15 +331,64 @@ function EventsView({ events, setEvents, attendance, members, theme, showNotif, 
               <button className="btn" onClick={() => setShowTemplates(false)} style={{ background: "transparent", color: theme.textMuted, padding: 4 }}><Icon name="close" size={18} /></button>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
-              {EVENT_TEMPLATES.map((t, i) => (
-                <button key={i} className="btn" onClick={() => applyTemplate(t)} style={{ background: theme.surface2, color: theme.text, padding: "12px 16px", borderRadius: 10, fontSize: 14, textAlign: "left", border: `1px solid ${theme.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <div>
+              {templates.map((t, i) => (
+                <div key={i} style={{ background: theme.surface2, border: `1px solid ${theme.border}`, borderRadius: 10, padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <button onClick={() => applyTemplate(t)} style={{ background: "transparent", border: "none", color: theme.text, textAlign: "left", flex: 1, cursor: "pointer", padding: 0 }}>
                     <div style={{ fontWeight: 500 }}>{t.name}</div>
                     <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 2 }}>{t.type} • {t.time}</div>
+                  </button>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button className="btn" onClick={() => openEditTemplate(t, i)} title="Edit" style={{ background: "transparent", color: theme.accent, padding: 6, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <Icon name="edit" size={14} />
+                    </button>
+                    <button className="btn" onClick={() => deleteTemplate(i)} title="Delete" style={{ background: "transparent", color: theme.danger, padding: 6, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <Icon name="trash" size={14} />
+                    </button>
                   </div>
-                  <Icon name="add" size={16} />
-                </button>
+                </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Template Modal */}
+      {showEditTemplate && (
+        <div className="modal-overlay" onClick={() => setShowEditTemplate(false)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: 26, width: "100%", maxWidth: 440 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 600 }}>Edit Template</h2>
+              <button className="btn" onClick={() => setShowEditTemplate(false)} style={{ background: "transparent", color: theme.textMuted, padding: 4 }}><Icon name="close" size={18} /></button>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
+              <div><label>Template Name *</label><input type="text" value={templateForm.name} onChange={e => setTemplateForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Sunday Worship Service" /></div>
+              <div>
+                <label>Event Type</label>
+                <select value={templateForm.type} onChange={e => setTemplateForm(f => ({ ...f, type: e.target.value }))}>
+                  {["Weekly Service", "Prayer Meeting", "Youth Ministry", "Children's Church", "Special Event"].map(t => <option key={t}>{t}</option>)}
+                </select>
+              </div>
+              <div><label>Default Time</label><input type="time" value={templateForm.time} onChange={e => setTemplateForm(f => ({ ...f, time: e.target.value }))} /></div>
+            </div>
+            <div style={{ display: "flex", gap: 9, marginTop: 22, justifyContent: "flex-end" }}>
+              <button className="btn" onClick={() => setShowEditTemplate(false)} style={{ background: theme.surface2, color: theme.text, padding: "8px 16px", borderRadius: 8, fontSize: 13 }}>Cancel</button>
+              <button className="btn" onClick={handleSaveTemplate} style={{ background: theme.accent, color: "white", padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 500 }}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Template Confirmation Modal */}
+      {showConfirmDelete && (
+        <div className="modal-overlay" onClick={() => setShowConfirmDelete(false)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: 26, width: "100%", maxWidth: 360 }}>
+            <div style={{ marginBottom: 20 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Delete Template?</h2>
+              <p style={{ fontSize: 13, color: theme.textMuted, margin: "8px 0 0 0" }}>This action cannot be undone.</p>
+            </div>
+            <div style={{ display: "flex", gap: 9, justifyContent: "flex-end" }}>
+              <button className="btn" onClick={() => setShowConfirmDelete(false)} style={{ background: theme.surface2, color: theme.text, padding: "8px 16px", borderRadius: 8, fontSize: 13 }}>Cancel</button>
+              <button className="btn" onClick={confirmDeleteTemplate} style={{ background: theme.danger, color: "white", padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 500 }}>Delete</button>
             </div>
           </div>
         </div>
@@ -328,6 +441,19 @@ function EventsView({ events, setEvents, attendance, members, theme, showNotif, 
               <button className="btn" onClick={() => setShowAttendanceModal(false)} style={{ background: "transparent", color: theme.textMuted, padding: 4 }}><Icon name="close" size={18} /></button>
             </div>
 
+            {/* Data Integrity Warning & Debug Info */}
+            {getAttendanceRecords(selectedEventForAttendance.id).length > 0 && selectedEventForAttendance.status === "Active" && (
+              <div style={{ background: `${theme.warning}18`, border: `1px solid ${theme.warning}40`, borderRadius: 10, padding: 12, marginBottom: 16, fontSize: 12, color: theme.warning, display: "flex", gap: 10, alignItems: "flex-start" }}>
+                <Icon name="alert" size={16} style={{ flexShrink: 0, marginTop: 2 }} />
+                <div>
+                  <strong>⚠️ Active Event Has Records:</strong> This event is still active but already has {getAttendanceRecords(selectedEventForAttendance.id).length} attendance record(s). Ensure these were legitimately scanned in Kiosk Mode.
+                  <div style={{ fontSize: 10, opacity: 0.8, marginTop: 6, fontFamily: "monospace", background: "rgba(0,0,0,0.2)", padding: 6, borderRadius: 4 }}>
+                    Event ID: {selectedEventForAttendance.id} | Valid Records: {getAttendanceRecords(selectedEventForAttendance.id).length}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Stats Section */}
             <div style={{ background: theme.surface2, border: `1px solid ${theme.border}`, borderRadius: 10, padding: "10px 12px", marginBottom: 22, display: "flex", gap: 0, flexWrap: "wrap" }}>
               <div style={{ flex: 1, minWidth: 100, padding: "0 10px", borderRight: `1px solid ${theme.border}` }}>
@@ -364,6 +490,7 @@ function EventsView({ events, setEvents, attendance, members, theme, showNotif, 
                     <th style={{ padding: "12px 8px", textAlign: "left", color: theme.textMuted, fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>Ministry</th>
                     <th style={{ padding: "12px 8px", textAlign: "left", color: theme.textMuted, fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>Check-in</th>
                     <th style={{ padding: "12px 8px", textAlign: "left", color: theme.textMuted, fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>Status</th>
+                    {canManageChurchData(currentUser.role) && <th style={{ padding: "12px 8px", textAlign: "center", color: theme.textMuted, fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>Action</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -374,6 +501,26 @@ function EventsView({ events, setEvents, attendance, members, theme, showNotif, 
                       <td style={{ padding: "12px 8px", color: theme.textMuted, fontSize: 12 }}>{record.memberMinistriy}</td>
                       <td style={{ padding: "12px 8px", color: theme.success, fontWeight: 500 }}>{record.timestamp ? new Date(record.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}</td>
                       <td style={{ padding: "12px 8px" }}><span style={{ background: `${theme.success}18`, color: theme.success, padding: "4px 8px", borderRadius: 6, fontSize: 11, fontWeight: 500 }}>Present</span></td>
+                      {canManageChurchData(currentUser.role) && (
+                        <td style={{ padding: "12px 8px", textAlign: "center" }}>
+                          <button
+                            className="btn"
+                            onClick={() => deleteAttendanceRecord(record.id)}
+                            title="Delete record"
+                            style={{
+                              background: "transparent",
+                              color: theme.danger,
+                              padding: "4px 6px",
+                              borderRadius: 4,
+                              border: "none",
+                              cursor: "pointer",
+                              fontSize: 12,
+                            }}
+                          >
+                            <Icon name="trash" size={14} />
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

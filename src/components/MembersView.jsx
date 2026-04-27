@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Icon } from "./Icon.jsx";
 import Avatar from "./Avatar.jsx";
 import { getQRDataUrl } from "../utils/qr.js";
@@ -561,6 +561,7 @@ function BulkPrintModal({ members, theme, showNotif, onClose }) {
   const [filterJoinedTo, setFilterJoinedTo] = useState("");
   const [searchFilter, setSearchFilter] = useState("");
   const [selected, setSelected] = useState(new Set());
+  const isFirstLoad = useRef(true);
 
   const filtered = activeMembers.filter(m => {
     if (filterMinistry !== "All" && m.ministry !== filterMinistry) return false;
@@ -571,9 +572,12 @@ function BulkPrintModal({ members, theme, showNotif, onClose }) {
     return true;
   });
 
-  // Auto-select filtered results on first load / filter change
+  // Auto-select filtered results only on first load
   useEffect(() => {
-    setSelected(new Set(filtered.map(m => m.id)));
+    if (isFirstLoad.current) {
+      setSelected(new Set(filtered.map(m => m.id)));
+      isFirstLoad.current = false;
+    }
   }, [filtered]);
 
   const toggleOne = id => setSelected(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
@@ -593,49 +597,220 @@ function BulkPrintModal({ members, theme, showNotif, onClose }) {
   const doPrint = async () => {
     if (selectedMembers.length === 0) { showNotif("Walang napiling member!", "error"); return; }
     const win = window.open("", "_blank");
+    
     const cards = await Promise.all(selectedMembers.map(async m => {
       const qrVal = `TLOB:${m.id}:${m.name}`;
-      const dataUrl = await getQRDataUrl(qrVal, { width: 21*4, margin: 0, color: { dark: "#1a1a2e", light: "#ffffff" } });
-      const qrImg = `<img src="${dataUrl}" width="84" height="84"/>`;
-      return `<div class="card">
-        <div class="hd"><img class="logo" src="${CHURCH_LOGO_SRC}" alt="TLOB"/><div class="ht"><div class="cn">The Lord Our Banner</div><div class="cs">Member ID Card</div></div></div>
-        <div class="bd">
-          <div class="qr-wrap">${qrImg}</div>
-          <div class="nm">${m.name}</div>
-          <div class="r2"><span class="mid">${m.id}</span>${m.ministry ? `<span class="min">${m.ministry}</span>` : ""}</div>
-          <div class="ft"><span class="dot ${m.status === "Active" ? "g" : "r"}"></span>${m.status} · ${m.joined || "—"}</div>
-        </div>
-      </div>`;
+      const dataUrl = await getQRDataUrl(qrVal, { width: 100, margin: 1, color: { dark: "#1a1a2e", light: "#ffffff" } });
+      return {
+        name: m.name,
+        id: m.id,
+        ministry: m.ministry || "",
+        status: m.status,
+        joined: m.joined || "—",
+        qrDataUrl: dataUrl
+      };
     }));
-    win.document.write(`<!DOCTYPE html><html><head><title>Bulk QR Cards - TLOB</title>
-    <style>
-      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
-      *{box-sizing:border-box;margin:0;padding:0;}
-      body{font-family:'Inter',sans-serif;background:#e2e8f0;padding:20px;}
-      h1{text-align:center;color:#1e293b;font-size:15px;margin-bottom:16px;font-weight:700;}
-      .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:960px;margin:0 auto;}
-      .card{background:white;border-radius:14px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.1);}
-      .hd{background:linear-gradient(160deg,#0f172a,#1e2d4d);padding:11px 13px;display:flex;align-items:center;gap:9px;}
-      .logo{width:36px;height:36px;border-radius:50%;border:1.5px solid rgba(255,255,255,.2);object-fit:cover;}
-      .ht .cn{font-size:10px;font-weight:700;color:white;line-height:1.2;}
-      .ht .cs{font-size:8px;color:rgba(99,102,241,.9);text-transform:uppercase;letter-spacing:.06em;margin-top:2px;}
-      .bd{padding:13px;display:flex;flex-direction:column;align-items:center;gap:7px;}
-      .qr-wrap{padding:6px;border:1px solid #e2e8f0;border-radius:8px;}
-      .nm{font-size:13px;font-weight:800;color:#0f172a;text-align:center;letter-spacing:-.02em;}
-      .r2{display:flex;gap:4px;flex-wrap:wrap;justify-content:center;}
-      .mid{font-size:9px;color:#64748b;font-family:monospace;background:#f1f5f9;padding:2px 7px;border-radius:999px;}
-      .min{font-size:9px;color:#6366f1;font-weight:600;background:rgba(99,102,241,.08);padding:2px 7px;border-radius:999px;border:1px solid rgba(99,102,241,.2);}
-      .ft{font-size:9px;color:#94a3b8;text-align:center;}
-      .dot{display:inline-block;width:5px;height:5px;border-radius:50%;margin-right:3px;vertical-align:middle;}
-      .g{background:#10b981;}.r{background:#ef4444;}
-      @media print{body{background:white;padding:0;}.grid{gap:8px;}h1{margin:8px 0;}.card{box-shadow:none;border:1px solid #e2e8f0;page-break-inside:avoid;}}
-    </style></head>
-    <body>
-      <h1>📋 QR ID Cards — The Lord Our Banner Christian Church (${selectedMembers.length} members)</h1>
-      <div class="grid">${cards}</div>
-    </body></html>`);
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>QR Cards - TLOB</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      font-family: "Inter", system-ui, sans-serif;
+      background: white;
+    }
+    
+    @page {
+      size: letter;
+      margin: 0.3in;
+    }
+    
+    .container {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      padding: 0;
+      margin: 0;
+    }
+    
+    .card {
+      width: 100%;
+      aspect-ratio: 2.5 / 3.2;
+      border: 5px solid #000000;
+      border-radius: 8px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      background: white;
+      page-break-inside: avoid;
+      gap: 8px;
+    }
+    
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      color: white;
+      padding: 6px 8px;
+      border-radius: 5px;
+    }
+    
+    .card-logo {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.3);
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+    
+    .card-title {
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.2;
+      flex: 1;
+    }
+    
+    .qr-box {
+      padding: 6px;
+      border: 1.5px solid #144dbe;
+      border-radius: 6px;
+      background: #f9fafb;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .qr-box img {
+      width: 210px;
+      height: 220px;
+      display: block;
+    }
+    
+    .card-name {
+      font-weight: 700;
+      font-size: 15px;
+      text-align: center;
+      color: #000;
+      max-width: 100%;
+      line-height: 1.2;
+      margin-top: 0px;
+    }
+    
+    .card-info {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      width: 100%;
+      flex: 1;
+      justify-content: flex-end;
+    }
+    
+    .card-status-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      width: 100%;
+    }
+    
+    .card-tags {
+      display: flex;
+      gap: 1px;
+      flex-wrap: wrap;
+      justify-content: center;
+      width: 800%;
+      font-size: 1px;
+    }
+    
+    .tag {
+      padding: 0px 1px;
+      border-radius: 3px;
+      background: #f3f4f6;
+      color: #374151;
+      border: 0.5px solid #d1d5db;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 90%;
+    }
+    
+    .tag-status {
+      background: #e0f2fe;
+      color: #0369a1;
+      border-color: #06b6d4;
+      font-weight: 600;
+      font-size: 12px;
+      padding: 1px 6px;
+    }
+    
+    .card-footer {
+      width: 100%;
+      text-align: center;
+      font-size: 10px;
+      font-weight: 600;
+      color: #666;
+      border-top: 1px solid #5d5f64;
+      padding-top: 6px;
+      margin-top: 8px;
+    }
+    
+    .dot {
+      display: inline-block;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      margin-right: 3px;
+      vertical-align: middle;
+    }
+    
+    .dot-active { background: #10b981; }
+    .dot-inactive { background: #ef4444; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    ${cards.map(card => `
+      <div class="card">
+        <div class="card-header">
+          <img class="card-logo" src="${CHURCH_LOGO_SRC}" alt="Logo">
+          <div class="card-title">TLOB<br>Member ID</div>
+        </div>
+        
+        <div class="qr-box">
+          <img src="${card.qrDataUrl}" alt="QR">
+        </div>
+        
+        <div class="card-name">${card.name}</div>
+        
+        <div class="card-info">
+          <div class="card-status-row">
+            <span class="tag">${card.id}</span>
+            <div class="tag tag-status">
+              <span class="dot ${card.status === "Active" ? "dot-active" : "dot-inactive"}"></span>
+              ${card.status}
+            </div>
+          </div>
+          <div class="card-footer">Gamitin ito para sa iyong Weekly Attendance.</div>
+        </div>
+      </div>
+    `).join("")}
+  </div>
+</body>
+</html>`;
+
+    win.document.write(html);
     win.document.close();
-    setTimeout(() => win.print(), 500);
+    setTimeout(() => win.print(), 300);
     showNotif(`Printing ${selectedMembers.length} QR card${selectedMembers.length > 1 ? "s" : ""}!`);
     onClose();
   };

@@ -7,7 +7,7 @@ let mainWindow = null;
 
 // Configure auto-updater
 autoUpdater.checkForUpdatesAndNotify = false; // We'll handle notifications manually
-autoUpdater.autoDownload = true; // Auto-download once update is found
+autoUpdater.autoDownload = false; // Don't auto-download, let user decide
 autoUpdater.autoInstallOnAppQuit = true; // Install update when app quits
 
 function resolveAssetPath(...parts) {
@@ -38,25 +38,8 @@ function createMainWindow() {
 
   win.once("ready-to-show", () => win.show());
 
-  // Allow in-app print/popups (about:blank/data/blob/local files), but open true externals in browser.
+  // Open external links in the system browser.
   win.webContents.setWindowOpenHandler(({ url }) => {
-    const isInternalPopup =
-      url === "about:blank" ||
-      url.startsWith("data:") ||
-      url.startsWith("blob:") ||
-      url.startsWith("file://") ||
-      url.startsWith("http://localhost");
-
-    if (isInternalPopup) {
-      return {
-        action: "allow",
-        overrideBrowserWindowOptions: {
-          autoHideMenuBar: true,
-          show: true,
-        },
-      };
-    }
-
     shell.openExternal(url);
     return { action: "deny" };
   });
@@ -108,20 +91,25 @@ autoUpdater.on("update-downloaded", (info) => {
 ipcMain.handle("check-for-updates", async () => {
   try {
     console.log("Checking for updates...");
-    const currentVersion = app.getVersion();
-    console.log("Current App Version:", currentVersion);
+    console.log("Current App Version:", app.getVersion());
     const result = await autoUpdater.checkForUpdates();
     console.log("Update check result:", result);
-    const latestVersion = result?.updateInfo?.version || null;
-    const updateAvailable = Boolean(latestVersion && latestVersion !== currentVersion);
-    return {
-      updateAvailable,
-      currentVersion,
-      updateInfo: result?.updateInfo || null,
-    };
+    return result;
   } catch (error) {
     console.error("Update check error:", error);
-    return { updateAvailable: false, error: error.message, currentVersion: app.getVersion() };
+    return { updateAvailable: false, error: error.message };
+  }
+});
+
+ipcMain.handle("download-update", async () => {
+  try {
+    console.log("Starting update download...");
+    const result = await autoUpdater.downloadUpdate();
+    console.log("Update downloaded:", result);
+    return { success: true };
+  } catch (error) {
+    console.error("Update download error:", error);
+    return { success: false, error: error.message };
   }
 });
 

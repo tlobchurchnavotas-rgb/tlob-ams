@@ -67,6 +67,22 @@ export default function TLOBApp() {
     setTimeout(() => setNotification(null), 3200);
   };
 
+  // Auto-clean orphaned attendance records (permanent fix for bug where records appear without scanning)
+  useEffect(() => {
+    if (attendance.length === 0 || events.length === 0) return;
+    
+    const validEventIds = new Set(events.map(e => e.id));
+    const orphaned = attendance.filter(a => !validEventIds.has(a.eventId));
+    
+    if (orphaned.length > 0) {
+      // Silently remove orphaned records
+      const cleaned = attendance.filter(a => validEventIds.has(a.eventId));
+      setAttendance(cleaned);
+      // Log for debugging
+      console.warn(`[Data Integrity] Removed ${orphaned.length} orphaned attendance record(s) with invalid eventIds`, orphaned);
+    }
+  }, [events, attendance, setAttendance]);
+
   useEffect(() => {
     const update = () => setIsFullscreen(Boolean(document.fullscreenElement));
     update();
@@ -467,7 +483,7 @@ export default function TLOBApp() {
             ? <MemberProfile member={profileMember} members={members} attendance={attendance} events={events} theme={theme} onClose={() => setProfileMember(null)} showNotif={showNotif} />
             : activeView === "dashboard" ? <DashboardView members={members} events={events} attendance={attendance} theme={theme} />
             : activeView === "members" ? <MembersView members={members} setMembers={setMembers} theme={theme} showNotif={showNotif} currentUser={currentUser} onViewProfile={setProfileMember} />
-            : activeView === "events" ? <EventsView events={events} setEvents={setEvents} attendance={attendance} members={members} theme={theme} showNotif={showNotif} currentUser={currentUser} />
+            : activeView === "events" ? <EventsView events={events} setEvents={setEvents} attendance={attendance} setAttendance={setAttendance} members={members} theme={theme} showNotif={showNotif} currentUser={currentUser} />
             : activeView === "scanner" ? <ScannerView members={members} events={events} attendance={attendance} setAttendance={setAttendance} theme={theme} showNotif={showNotif} currentUser={currentUser} onLaunchKiosk={async (evId) => {
               // Best-effort: request fullscreen on the user gesture that launches kiosk mode.
               try { await document.documentElement.requestFullscreen?.(); } catch {}

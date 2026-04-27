@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { isSupabaseConfigured, supabase } from "../supabaseClient.js";
 import { Icon } from "./Icon.jsx";
 import { recordAuditLog } from "../auditLogs.js";
+import packageJson from "../../package.json";
 
 function deriveUsernameFromEmail(email) {
   const raw = (email || "").split("@")[0] || "";
@@ -31,6 +32,9 @@ export default function AdminSettingsView({ theme, showNotif, currentUser, setCu
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ name: "", username: "", avatarUrl: "" });
   const [checkingUpdates, setCheckingUpdates] = useState(false);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState(null);
+  const [downloadingUpdate, setDownloadingUpdate] = useState(false);
   const fileInputRef = useRef(null);
 
   const canUseDb = useMemo(() => Boolean(isSupabaseConfigured && supabase && userId), [userId]);
@@ -130,14 +134,35 @@ export default function AdminSettingsView({ theme, showNotif, currentUser, setCu
       const result = await window.tlob.checkForUpdates();
       if (result?.error) throw new Error(result.error);
       if (result?.updateAvailable) {
-        showNotif(`Update available! Version ${result.updateInfo?.version || "unknown"} is downloading in the background.`, "success");
+        setUpdateAvailable(true);
+        setUpdateInfo(result.updateInfo);
+        showNotif(`Update available! Version ${result.updateInfo?.version || "unknown"}. Click Download to get it.`, "success");
       } else {
+        setUpdateAvailable(false);
+        setUpdateInfo(null);
         showNotif(`You're already using the latest version (${result?.currentVersion || "current"}).`, "info");
       }
     } catch (error) {
       showNotif(`Error checking for updates: ${error?.message || "Unknown error"}`, "error");
     } finally {
       setCheckingUpdates(false);
+    }
+  };
+
+  const downloadUpdate = async () => {
+    if (!window.tlob?.downloadUpdate) {
+      showNotif("Download not available in this environment.", "error");
+      return;
+    }
+
+    setDownloadingUpdate(true);
+    try {
+      await window.tlob.downloadUpdate();
+      showNotif("Update downloaded! Restart the app to install.", "success");
+    } catch (error) {
+      showNotif(`Error downloading update: ${error?.message || "Unknown error"}`, "error");
+    } finally {
+      setDownloadingUpdate(false);
     }
   };
 
@@ -347,34 +372,74 @@ export default function AdminSettingsView({ theme, showNotif, currentUser, setCu
             <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 4 }}>
               Manage app updates and system information.
             </div>
+            <div style={{ marginTop: 10, padding: "8px 12px", borderRadius: 8, background: theme.surface2, border: `1px solid ${theme.border}`, fontSize: 12 }}>
+              <span style={{ color: theme.textMuted }}>Current Version: </span>
+              <span style={{ fontWeight: 600, color: theme.text }}>{packageJson.version}</span>
+              {updateAvailable && (
+                <div style={{ marginTop: 8, padding: "6px 8px", borderRadius: 6, background: `${theme.accent}20`, border: `1px solid ${theme.accent}`, fontSize: 11 }}>
+                  <span style={{ color: theme.accent, fontWeight: 600 }}>Update available: {updateInfo?.version || "latest"}</span>
+                </div>
+              )}
+            </div>
           </div>
-          <button
-            className="btn"
-            disabled={checkingUpdates}
-            onClick={checkForUpdates}
-            style={{
-              background: theme.accent,
-              color: "white",
-              padding: "9px 14px",
-              borderRadius: 10,
-              fontSize: 13,
-              display: "flex",
-              alignItems: "center",
-              gap: 7,
-              opacity: checkingUpdates ? 0.6 : 1,
-            }}
-          >
-            {checkingUpdates ? (
-              <>
-                <span style={{ width: 10, height: 10, borderRadius: 999, border: "2px solid rgba(255,255,255,.55)", borderTopColor: "white", display: "inline-block", animation: "spin 1s linear infinite" }} />
-                Checking…
-              </>
-            ) : (
-              <>
-                <Icon name="refresh" size={16} /> Check for Updates
-              </>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <button
+              className="btn"
+              disabled={checkingUpdates || downloadingUpdate}
+              onClick={checkForUpdates}
+              style={{
+                background: theme.accent,
+                color: "white",
+                padding: "9px 14px",
+                borderRadius: 10,
+                fontSize: 13,
+                display: "flex",
+                alignItems: "center",
+                gap: 7,
+                opacity: checkingUpdates || downloadingUpdate ? 0.6 : 1,
+              }}
+            >
+              {checkingUpdates ? (
+                <>
+                  <span style={{ width: 10, height: 10, borderRadius: 999, border: "2px solid rgba(255,255,255,.55)", borderTopColor: "white", display: "inline-block", animation: "spin 1s linear infinite" }} />
+                  Checking…
+                </>
+              ) : (
+                <>
+                  <Icon name="refresh" size={16} /> Check for Updates
+                </>
+              )}
+            </button>
+            {updateAvailable && (
+              <button
+                className="btn"
+                disabled={downloadingUpdate}
+                onClick={downloadUpdate}
+                style={{
+                  background: "#10b981",
+                  color: "white",
+                  padding: "9px 14px",
+                  borderRadius: 10,
+                  fontSize: 13,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 7,
+                  opacity: downloadingUpdate ? 0.6 : 1,
+                }}
+              >
+                {downloadingUpdate ? (
+                  <>
+                    <span style={{ width: 10, height: 10, borderRadius: 999, border: "2px solid rgba(255,255,255,.55)", borderTopColor: "white", display: "inline-block", animation: "spin 1s linear infinite" }} />
+                    Downloading…
+                  </>
+                ) : (
+                  <>
+                    <Icon name="download" size={16} /> Download Update
+                  </>
+                )}
+              </button>
             )}
-          </button>
+          </div>
         </div>
       </div>
     </div>
