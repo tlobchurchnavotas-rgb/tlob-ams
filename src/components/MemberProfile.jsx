@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Icon } from "./Icon.jsx";
 import Avatar from "./Avatar.jsx";
 import { QRCode, getQRDataUrl } from "../utils/qr.js";
-import { CHURCH_LOGO_SRC } from "../constants.js";
+import { CHURCH_LOGO_SRC, formatJoinedForDisplay } from "../constants.js";
 
 
 function MemberProfile({ member, attendance, events, members, theme, showNotif }) {
@@ -24,7 +24,13 @@ function MemberProfile({ member, attendance, events, members, theme, showNotif }
   <meta charset="UTF-8">
   <title>QR Card - ${m.name}</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
     
     body {
       font-family: "Inter", system-ui, sans-serif;
@@ -61,10 +67,11 @@ function MemberProfile({ member, attendance, events, members, theme, showNotif }
       align-items: center;
       gap: 10px;
       width: 100%;
-      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      background: #1e293b;
       color: white;
       padding: 8px 12px;
       border-radius: 5px;
+      border: 1px solid #0f172a;
     }
     
     .card-logo {
@@ -158,20 +165,30 @@ function MemberProfile({ member, attendance, events, members, theme, showNotif }
     }
     
     .dot {
-      display: inline-block;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       width: 5px;
       height: 5px;
       border-radius: 50%;
       margin-right: 3px;
       vertical-align: middle;
+      border: 0.75px solid currentColor;
     }
     
-    .dot-active { background: #10b981; }
-    .dot-inactive { background: #ef4444; }
+    .dot-active { background: #10b981; color: #10b981; }
+    .dot-inactive { background: #ef4444; color: #ef4444; }
     
     @media print {
       body { padding: 0; }
       .card { box-shadow: none; margin: 0; }
+      .card-header,
+      .tag-status,
+      .dot-active,
+      .dot-inactive {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
     }
   </style>
 </head>
@@ -223,7 +240,7 @@ function MemberProfile({ member, attendance, events, members, theme, showNotif }
             <div style={{ paddingBottom: 20, flex: 1 }}>
               <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-.02em" }}>{member.name}</div>
               <div style={{ fontSize: 13, color: theme.textMuted, marginTop: 3 }}>
-                {member.ministry || "No Ministry"} • Joined {member.joined}{derivedAgeGroup ? ` • ${derivedAgeGroup}` : ""}
+                {member.ministry || "No Ministry"} • Joined {formatJoinedForDisplay(member.joined) || member.joined || "—"}{derivedAgeGroup ? ` • ${derivedAgeGroup}` : ""}
               </div>
               <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                 <span className={`badge tag-${member.status.toLowerCase()}`}>{member.status}</span>

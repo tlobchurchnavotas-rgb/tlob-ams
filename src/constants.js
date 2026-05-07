@@ -7,6 +7,77 @@ const CHURCH_LOGO_B64 = "iVBORw0KGgoAAAANSUhEUgAAAHgAAAB4CAYAAAA5ZDbSAAABCGlDQ1B
 // Keep `CHURCH_LOGO_B64` for embedded/print use cases.
 const CHURCH_LOGO_SRC = `${process.env.PUBLIC_URL || ""}/logo.png`;
 
+function normalizeJoinedDate(value) {
+  if (value == null) return null;
+  if (typeof value !== "string") return value;
+  const v = value.trim();
+  if (!v) return null;
+
+  const yearOnly = v.match(/^(\d{4})$/);
+  if (yearOnly) return yearOnly[1];
+
+  const yearMonth = v.match(/^(\d{4})-(\d{1,2})$/);
+  if (yearMonth) {
+    const yyyy = yearMonth[1];
+    const mm = yearMonth[2].padStart(2, "0");
+    return `${yyyy}-${mm}`;
+  }
+
+  const yearMonthDay = v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (yearMonthDay) {
+    const yyyy = yearMonthDay[1];
+    const mm = yearMonthDay[2].padStart(2, "0");
+    const dd = yearMonthDay[3].padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  const exactDmy = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (exactDmy) {
+    const dd = exactDmy[1].padStart(2, "0");
+    const mm = exactDmy[2].padStart(2, "0");
+    const yyyy = exactDmy[3];
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  return null;
+}
+
+function getJoinedDateRange(value) {
+  const v = normalizeJoinedDate(value);
+  if (!v) return null;
+  if (/^\d{4}$/.test(v)) {
+    return [`${v}-01-01`, `${v}-12-31`];
+  }
+  if (/^\d{4}-\d{2}$/.test(v)) {
+    const [yyyy, mm] = v.split("-");
+    const month = parseInt(mm, 10);
+    const lastDay = new Date(parseInt(yyyy, 10), month, 0).getDate();
+    return [`${yyyy}-${mm}-01`, `${yyyy}-${mm}-${String(lastDay).padStart(2, "0")}`];
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+    return [v, v];
+  }
+  return null;
+}
+
+function formatJoinedForDisplay(value) {
+  const v = normalizeJoinedDate(value);
+  if (!v) return "";
+  if (/^\d{4}$/.test(v)) return v;
+  if (/^\d{4}-\d{2}$/.test(v)) {
+    const [yyyy, mm] = v.split("-");
+    const date = new Date(parseInt(yyyy, 10), parseInt(mm, 10) - 1, 1);
+    return date.toLocaleDateString(undefined, { year: "numeric", month: "long" });
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+    const [yyyy, mm, dd] = v.split("-");
+    const date = new Date(parseInt(yyyy, 10), parseInt(mm, 10) - 1, parseInt(dd, 10));
+    if (Number.isNaN(date.getTime())) return v;
+    return date.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+  }
+  return v;
+}
+
 // ─── PERSISTENT STORAGE HOOK ──────────────────────────────────────────────────
 function usePersisted(key, initial, ownerId = null) {
   const storageKey = "tlob_" + key;
@@ -139,11 +210,12 @@ function useSupabaseTable(tableName, initialArray, ownerId) {
     // Supabase `date` columns cannot accept empty string; convert "" -> null.
     if (tableName === "members") {
       const out = { ...r };
-      out.joined = normalizeDate(out.joined);
+      out.joined = normalizeJoinedDate(out.joined);
       out.birthday = normalizeDate(out.birthday);
       out.anniversary = normalizeDate(out.anniversary);
       // Map camelCase -> snake_case for DB compatibility
       if (out.ageGroup !== undefined) { out.age_group = out.ageGroup; delete out.ageGroup; }
+      if (out.sourceEventId !== undefined) { out.source_event_id = out.sourceEventId; delete out.sourceEventId; }
       // Avoid storing base64 data URLs in Postgres (too large / slow). Use Supabase Storage later.
       if (typeof out.photo === "string" && out.photo.startsWith("data:")) out.photo = null;
       return out;
@@ -178,6 +250,7 @@ function useSupabaseTable(tableName, initialArray, ownerId) {
     if (tableName === "members") {
       const out = { ...r };
       if (out.age_group !== undefined) { out.ageGroup = out.age_group; delete out.age_group; }
+      if (out.source_event_id !== undefined) { out.sourceEventId = out.source_event_id; delete out.source_event_id; }
       return out;
     }
     if (tableName === "attendance") {
@@ -326,8 +399,8 @@ function useSupabaseTable(tableName, initialArray, ownerId) {
         const code = String(upErr?.code || "");
 
         // PostgREST: schema cache missing column
-        if (code === "PGRST204" && msg.includes("age_group") && tableName === "members") {
-          const stripped = changed.map(({ age_group, ...rest }) => rest);
+        if (code === "PGRST204" && tableName === "members" && (msg.includes("age_group") || msg.includes("source_event_id"))) {
+          const stripped = changed.map(({ age_group, source_event_id, ...rest }) => rest);
           const { error: retryErr } = await supabase
             .from(tableName)
             .upsert(stripped, { onConflict: "owner_id,id" });
@@ -447,6 +520,21 @@ function useSupabaseTable(tableName, initialArray, ownerId) {
 // ─── AGE GROUPS ───────────────────────────────────────────────────────────────
 const AGE_GROUPS = ["Kids", "Youth", "Young Pro", "Adult", "Senior"];
 
+// ─── MINISTRY OPTIONS ─────────────────────────────────────────────────────────
+// Used by Add/Edit Member UI (checkbox list) and filters.
+const MINISTRY_OPTIONS = [
+  "Worship Team",
+  "Youth Ministry",
+  "Children's Church",
+  "Prayer Team",
+  "Media Team",
+  "Ushers",
+  "Deacons",
+  "Women's Ministry",
+  "Men's Ministry",
+  "TLOB Pastor"
+];
+
 // ─── SEED DATA ────────────────────────────────────────────────────────────────
 const SEED_MEMBERS = [
   { id: "M001", name: "Grace Reyes", contact: "09171234567", ministry: "Worship Team", status: "Active", joined: "2022-01-15", photo: null, archived: false, birthday: "1995-03-14", anniversary: "", ageGroup: "Young Pro" },
@@ -511,6 +599,7 @@ export {
   usePersisted,
   useSupabaseTable,
   AGE_GROUPS,
+  MINISTRY_OPTIONS,
   SEED_MEMBERS,
   SEED_EVENTS,
   SEED_ATTENDANCE,
@@ -518,4 +607,7 @@ export {
   SEED_VISITORS,
   EVENT_TEMPLATES,
   KIOSK_SLIDES,
+  normalizeJoinedDate,
+  getJoinedDateRange,
+  formatJoinedForDisplay,
 };

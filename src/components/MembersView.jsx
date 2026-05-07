@@ -2,17 +2,30 @@ import { useState, useEffect, useRef } from "react";
 import { Icon } from "./Icon.jsx";
 import Avatar from "./Avatar.jsx";
 import { getQRDataUrl } from "../utils/qr.js";
-import { CHURCH_LOGO_SRC, AGE_GROUPS } from "../constants.js";
+import { CHURCH_LOGO_SRC, AGE_GROUPS, MINISTRY_OPTIONS, normalizeJoinedDate, getJoinedDateRange, formatJoinedForDisplay } from "../constants.js";
 import { canManageChurchData } from "../roles.js";
 import { recordAuditLog } from "../auditLogs.js";
 
+const splitMinistries = (value) => {
+  if (Array.isArray(value)) return value.map((item) => String(item || "").trim()).filter(Boolean);
+  return String(value || "").split(",").map((item) => item.trim()).filter(Boolean);
+};
+const formatMinistry = (value) => splitMinistries(value).join(", ");
 
-function MembersView({ members, setMembers, theme, showNotif, currentUser, onViewProfile }) {
+const isJoinedWithinFilter = (joined, from, to) => {
+  const range = getJoinedDateRange(joined);
+  if (!range) return false;
+  if (from && range[1] < from) return false;
+  if (to && range[0] > to) return false;
+  return true;
+};
+
+function MembersView({ members, setMembers, events, theme, showNotif, currentUser, onViewProfile }) {
   const [search, setSearch] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editMember, setEditMember] = useState(null);
-  const [form, setForm] = useState({ name: "", contact: "", ministry: "", ageGroup: "", status: "Active", joined: "", photo: null, birthday: "", anniversary: "" });
+  const [form, setForm] = useState({ name: "", contact: "", gender: "", ministry: [], ageGroup: "", status: "Active", joined: "", sourceEventId: "", photo: null, birthday: "", anniversary: "" });
   const [showCSVModal, setShowCSVModal] = useState(false);
   const [showBulkPrintModal, setShowBulkPrintModal] = useState(false);
 
@@ -20,9 +33,10 @@ function MembersView({ members, setMembers, theme, showNotif, currentUser, onVie
   const [filterAgeGroup, setFilterAgeGroup] = useState("All");
   const [filterJoinedFrom, setFilterJoinedFrom] = useState("");
   const [filterJoinedTo, setFilterJoinedTo] = useState("");
+  const [selectedArchivedIds, setSelectedArchivedIds] = useState(new Set());
 
   const activeOrArchived = members.filter(m => (showArchived ? m.archived : !m.archived));
-  const ministries = [...new Set(activeOrArchived.map(m => (m.ministry || "").trim()).filter(Boolean))].sort();
+  const ministries = [...new Set(activeOrArchived.flatMap(m => splitMinistries(m.ministry)))].sort();
   const ageGroups = [...new Set(activeOrArchived.map(m => (m.ageGroup || "").trim()).filter(Boolean))].sort();
 
   const visible = activeOrArchived.filter(m => {
@@ -30,22 +44,18 @@ function MembersView({ members, setMembers, theme, showNotif, currentUser, onVie
     if (q) {
       const name = (m.name || "").toLowerCase();
       const id = (m.id || "").toLowerCase();
-      const ministry = (m.ministry || "").toLowerCase();
-      if (!name.includes(q) && !id.includes(q) && !ministry.includes(q)) return false;
+      const contact = (m.contact || "").toLowerCase();
+      const ministry = formatMinistry(m.ministry).toLowerCase();
+      if (!name.includes(q) && !id.includes(q) && !contact.includes(q) && !ministry.includes(q)) return false;
     }
-
-    if (filterMinistry !== "All" && (m.ministry || "") !== filterMinistry) return false;
-    if (filterAgeGroup !== "All" && (m.ageGroup || "") !== filterAgeGroup) return false;
-
     // Dates are stored as yyyy-mm-dd strings (ISO) so lexicographic compare works.
-    if (filterJoinedFrom) {
-      if (!m.joined || m.joined < filterJoinedFrom) return false;
-    }
-    if (filterJoinedTo) {
-      if (!m.joined || m.joined > filterJoinedTo) return false;
+    if ((filterJoinedFrom || filterJoinedTo) && !isJoinedWithinFilter(m.joined, filterJoinedFrom, filterJoinedTo)) {
+      return false;
     }
     return true;
   });
+  const selectedArchivedVisibleCount = visible.filter(m => m.archived && selectedArchivedIds.has(m.id)).length;
+  const allVisibleArchivedSelected = showArchived && visible.length > 0 && selectedArchivedVisibleCount === visible.length;
 
   const buildFilterLabel = () => {
     const parts = [];
@@ -70,7 +80,7 @@ function MembersView({ members, setMembers, theme, showNotif, currentUser, onVie
       m.id,
       m.name,
       m.contact || "",
-      m.ministry || "",
+      formatMinistry(m.ministry) || "",
       m.ageGroup || "",
       m.archived ? "Archived" : (m.status || ""),
       m.joined || "",
@@ -111,7 +121,7 @@ function MembersView({ members, setMembers, theme, showNotif, currentUser, onVie
         <td><code>${esc(m.id)}</code></td>
         <td>${esc(m.name)}</td>
         <td>${esc(m.contact || "—")}</td>
-        <td>${esc(m.ministry || "—")}</td>
+        <td>${esc(formatMinistry(m.ministry) || "—")}</td>
         <td>${esc(m.ageGroup || "—")}</td>
         <td>${esc(m.archived ? "Archived" : (m.status || "—"))}</td>
         <td>${esc(m.joined || "—")}</td>
@@ -177,15 +187,13 @@ function MembersView({ members, setMembers, theme, showNotif, currentUser, onVie
   };
 
   const openAdd = () => {
-    const today = new Date().toISOString().split("T")[0];
     setEditMember(null);
-    setForm({ name: "", contact: "", ministry: "", ageGroup: "", status: "Active", joined: today, photo: null, birthday: "", anniversary: "" });
+    setForm({ name: "", contact: "", gender: "", ministry: [], ageGroup: "", status: "Active", joined: "", sourceEventId: "", photo: null, birthday: "", anniversary: "" });
     setShowModal(true);
   };
   const openEdit = m => {
-    const fallbackJoined = new Date().toISOString().split("T")[0];
     setEditMember(m);
-    setForm({ name: m.name, contact: m.contact, ministry: m.ministry || "", ageGroup: m.ageGroup || "", status: m.status, joined: m.joined || fallbackJoined, photo: m.photo || null, birthday: m.birthday || "", anniversary: m.anniversary || "" });
+    setForm({ name: m.name, contact: m.contact, gender: m.gender || "", ministry: splitMinistries(m.ministry), ageGroup: m.ageGroup || "", status: m.status, joined: m.joined || "", sourceEventId: m.sourceEventId || "", photo: m.photo || null, birthday: m.birthday || "", anniversary: m.anniversary || "" });
     setShowModal(true);
   };
 
@@ -199,18 +207,23 @@ function MembersView({ members, setMembers, theme, showNotif, currentUser, onVie
 
   const handleSave = async () => {
     if (!form.name.trim()) return;
-    const payload = { ...form };
+    if (form.joined && !normalizeJoinedDate(form.joined)) {
+      showNotif("Joined date must be in YYYY, YYYY-MM, or YYYY-MM-DD format", "error");
+      return;
+    }
+    const payload = { ...form, ministry: formatMinistry(form.ministry) };
+    payload.joined = normalizeJoinedDate(payload.joined) || "";
     if (editMember) {
       const before = editMember;
       const after = { ...before, ...payload };
       setMembers(prev => prev.map(m => m.id === before.id ? after : m));
       showNotif("Member updated");
       try {
-        const fieldsToTrack = ["name", "contact", "ministry", "ageGroup", "status", "joined", "birthday", "anniversary"];
+        const fieldsToTrack = ["name", "contact", "gender", "ministry", "ageGroup", "status", "joined", "sourceEventId", "birthday", "anniversary"];
         const changedFields = fieldsToTrack
           .map((field) => {
-            const beforeVal = before[field] ?? "";
-            const afterVal = after[field] ?? "";
+            const beforeVal = field === "ministry" ? formatMinistry(before[field]) : (before[field] ?? "");
+            const afterVal = field === "ministry" ? formatMinistry(after[field]) : (after[field] ?? "");
             if (String(beforeVal) === String(afterVal)) return null;
             return { field, before: beforeVal || null, after: afterVal || null };
           })
@@ -235,8 +248,7 @@ function MembersView({ members, setMembers, theme, showNotif, currentUser, onVie
       const ids = members.map(m => parseInt(m.id.slice(1))).filter(n => !isNaN(n));
       const nextNum = ids.length > 0 ? Math.max(...ids) + 1 : 1;
       const newId = `M${String(nextNum).padStart(3, "0")}`;
-      const joined = payload.joined || new Date().toISOString().split("T")[0];
-      const created = { id: newId, ...payload, joined, archived: false };
+      const created = { id: newId, ...payload, archived: false };
       setMembers(prev => [...prev, created]);
       showNotif("Member added");
       try {
@@ -248,12 +260,13 @@ function MembersView({ members, setMembers, theme, showNotif, currentUser, onVie
           metadata: {
             memberId: newId,
             name: created.name,
-            joined,
+            joined: created.joined || null,
           },
         });
       } catch {}
+      setForm({ name: "", contact: "", gender: "", ministry: [], ageGroup: "", status: "Active", joined: "", sourceEventId: "", photo: null, birthday: "", anniversary: "" });
     }
-    setShowModal(false);
+    if (editMember) setShowModal(false);
   };
 
   const handleArchive = async id => {
@@ -272,6 +285,11 @@ function MembersView({ members, setMembers, theme, showNotif, currentUser, onVie
 
   const handleRestore = async id => {
     setMembers(prev => prev.map(m => m.id === id ? { ...m, archived: false } : m));
+    setSelectedArchivedIds(prev => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
     showNotif("Member restored");
     try {
       await recordAuditLog({
@@ -283,6 +301,113 @@ function MembersView({ members, setMembers, theme, showNotif, currentUser, onVie
       });
     } catch {}
   };
+
+  const handleDelete = async id => {
+    const memberToDelete = members.find(m => m.id === id);
+    if (!memberToDelete) return;
+    const confirmed = window.confirm(`Delete archived member "${memberToDelete.name}" permanently? This cannot be undone.`);
+    if (!confirmed) return;
+
+    setMembers(prev => prev.filter(m => m.id !== id));
+    setSelectedArchivedIds(prev => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    showNotif("Archived member deleted", "warning");
+    try {
+      await recordAuditLog({
+        actor: currentUser,
+        action: "member_deleted",
+        target: id,
+        source: "members",
+        metadata: {
+          memberId: id,
+          name: memberToDelete.name || null,
+          archived: true,
+        },
+      });
+    } catch {}
+  };
+
+  const toggleArchivedSelection = (id) => {
+    setSelectedArchivedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllVisibleArchived = () => {
+    if (!showArchived) return;
+    setSelectedArchivedIds(prev => {
+      const next = new Set(prev);
+      const visibleIds = visible.map(m => m.id);
+      const shouldSelectAll = !allVisibleArchivedSelected;
+      visibleIds.forEach((id) => {
+        if (shouldSelectAll) next.add(id);
+        else next.delete(id);
+      });
+      return next;
+    });
+  };
+
+  const handleBulkDeleteArchived = async () => {
+    const ids = visible.map(m => m.id).filter(id => selectedArchivedIds.has(id));
+    if (!ids.length) {
+      showNotif("No archived members selected", "warning");
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete ${ids.length} archived member${ids.length !== 1 ? "s" : ""} permanently? This cannot be undone.`);
+    if (!confirmed) return;
+
+    const deletedMembers = members.filter(m => ids.includes(m.id));
+    setMembers(prev => prev.filter(m => !ids.includes(m.id)));
+    setSelectedArchivedIds(prev => {
+      const next = new Set(prev);
+      ids.forEach(id => next.delete(id));
+      return next;
+    });
+    showNotif(`${ids.length} archived member${ids.length !== 1 ? "s" : ""} deleted`, "warning");
+
+    try {
+      await Promise.allSettled(
+        deletedMembers.map((m) =>
+          recordAuditLog({
+            actor: currentUser,
+            action: "member_deleted",
+            target: m.id,
+            source: "members",
+            metadata: {
+              memberId: m.id,
+              name: m.name || null,
+              archived: true,
+              bulkDelete: true,
+            },
+          })
+        )
+      );
+    } catch {}
+  };
+
+  useEffect(() => {
+    if (showArchived) return;
+    setSelectedArchivedIds(new Set());
+  }, [showArchived]);
+
+  useEffect(() => {
+    if (!showArchived) return;
+    setSelectedArchivedIds(prev => {
+      const visibleIds = new Set(visible.map(m => m.id));
+      const next = new Set();
+      prev.forEach((id) => {
+        if (visibleIds.has(id)) next.add(id);
+      });
+      return next;
+    });
+  }, [visible, showArchived]);
 
   // CSV Import
   const handleCSVImport = e => {
@@ -304,8 +429,9 @@ function MembersView({ members, setMembers, theme, showNotif, currentUser, onVie
         const cols = line.split(",").map(c => c.trim().replace(/^"|"$/g, ""));
         const id = `M${String(nextNum++).padStart(3, "0")}`;
         const today = new Date().toISOString().split("T")[0];
-        const joined = joinedIdx >= 0 ? (cols[joinedIdx] || "").trim() : "";
-        return { id, name: cols[nameIdx] || "Unknown", contact: contactIdx >= 0 ? cols[contactIdx] : "", ministry: ministryIdx >= 0 ? cols[ministryIdx] : "", status: statusIdx >= 0 ? cols[statusIdx] : "Active", joined: joined || today, photo: null, archived: false };
+        const joinedRaw = joinedIdx >= 0 ? (cols[joinedIdx] || "").trim() : "";
+      const joined = normalizeJoinedDate(joinedRaw) || "";
+        return { id, name: cols[nameIdx] || "Unknown", contact: contactIdx >= 0 ? cols[contactIdx] : "", ministry: ministryIdx >= 0 ? cols[ministryIdx] : "", status: statusIdx >= 0 ? cols[statusIdx] : "Active", joined, sourceEventId: "", photo: null, archived: false };
       }).filter(m => m.name && m.name !== "Unknown");
       setMembers(prev => [...prev, ...newMembers]);
       showNotif(`${newMembers.length} members imported!`);
@@ -319,7 +445,7 @@ function MembersView({ members, setMembers, theme, showNotif, currentUser, onVie
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
         <div style={{ flex: 1, minWidth: 200, position: "relative" }}>
           <div style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: theme.textMuted, pointerEvents: "none" }}><Icon name="search" size={15} /></div>
-          <input type="text" placeholder="Search members..." value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft: 34 }} />
+          <input type="text" placeholder="Search members by name, contact number, Facebook name, or email" value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft: 34 }} />
         </div>
         <button className="btn" onClick={() => setShowArchived(!showArchived)} style={{ background: showArchived ? `${theme.warning}18` : theme.surface2, color: showArchived ? theme.warning : theme.textMuted, padding: "8px 14px", borderRadius: 8, fontSize: 13, border: `1px solid ${theme.border}`, display: "flex", alignItems: "center", gap: 6 }}>
           <Icon name="archive" size={15} /> {showArchived ? "Active Members" : "Archived"}
@@ -334,6 +460,17 @@ function MembersView({ members, setMembers, theme, showNotif, currentUser, onVie
             </button>
             <button className="btn" onClick={openAdd} style={{ background: theme.accent, color: "white", padding: "8px 16px", borderRadius: 8, fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>
               <Icon name="add" size={15} /> Add Member
+            </button>
+          </>
+        )}
+        {canManageChurchData(currentUser.role) && showArchived && (
+          <>
+            <button className="btn" onClick={toggleSelectAllVisibleArchived} style={{ background: theme.surface2, color: theme.textMuted, padding: "8px 14px", borderRadius: 8, fontSize: 13, border: `1px solid ${theme.border}`, display: "flex", alignItems: "center", gap: 6 }}>
+              <input type="checkbox" readOnly checked={allVisibleArchivedSelected} style={{ accentColor: theme.accent }} />
+              {allVisibleArchivedSelected ? "Unselect All" : "Select All"}
+            </button>
+            <button className="btn" onClick={handleBulkDeleteArchived} disabled={selectedArchivedVisibleCount === 0} style={{ background: selectedArchivedVisibleCount ? `${theme.danger}15` : theme.surface2, color: selectedArchivedVisibleCount ? theme.danger : theme.textMuted, padding: "8px 14px", borderRadius: 8, fontSize: 13, border: `1px solid ${selectedArchivedVisibleCount ? `${theme.danger}40` : theme.border}`, display: "flex", alignItems: "center", gap: 6, cursor: selectedArchivedVisibleCount ? "pointer" : "not-allowed" }}>
+              <Icon name="trash" size={15} /> Delete Selected ({selectedArchivedVisibleCount})
             </button>
           </>
         )}
@@ -406,10 +543,10 @@ function MembersView({ members, setMembers, theme, showNotif, currentUser, onVie
                   </div>
                 </td>
                 <td style={{ color: theme.textMuted, fontSize: 13 }}>{m.contact || "—"}</td>
-                <td style={{ color: theme.textMuted, fontSize: 13 }}>{m.ministry || "—"}</td>
+                <td style={{ color: theme.textMuted, fontSize: 13 }}>{formatMinistry(m.ministry) || "—"}</td>
                 <td style={{ color: theme.textMuted, fontSize: 13 }}>{m.ageGroup || "—"}</td>
                 <td><span className={`badge tag-${m.archived ? "archived" : m.status.toLowerCase()}`}>{m.archived ? "Archived" : m.status}</span></td>
-                <td style={{ color: theme.textMuted, fontSize: 12 }}>{m.joined}</td>
+                <td style={{ color: theme.textMuted, fontSize: 12 }}>{formatJoinedForDisplay(m.joined) || "—"}</td>
                 <td>
                   <div style={{ display: "flex", gap: 5 }}>
                     <button className="btn" onClick={() => onViewProfile(m)} style={{ background: `${theme.accent2}15`, color: theme.accent2, padding: "5px 9px", borderRadius: 6, fontSize: 11, display: "flex", alignItems: "center", gap: 3 }}>
@@ -426,9 +563,17 @@ function MembersView({ members, setMembers, theme, showNotif, currentUser, onVie
                       </>
                     )}
                     {canManageChurchData(currentUser.role) && m.archived && (
-                      <button className="btn" onClick={() => handleRestore(m.id)} style={{ background: `${theme.success}15`, color: theme.success, padding: "5px 9px", borderRadius: 6, fontSize: 11, display: "flex", alignItems: "center", gap: 3 }}>
-                        <Icon name="restore" size={12} /> Restore
-                      </button>
+                      <>
+                        <label style={{ display: "flex", alignItems: "center", marginBottom: 0, textTransform: "none", letterSpacing: 0, cursor: "pointer", padding: "0 4px" }} title="Select archived member">
+                          <input type="checkbox" checked={selectedArchivedIds.has(m.id)} onChange={() => toggleArchivedSelection(m.id)} style={{ accentColor: theme.accent, cursor: "pointer" }} />
+                        </label>
+                        <button className="btn" onClick={() => handleRestore(m.id)} style={{ background: `${theme.success}15`, color: theme.success, padding: "5px 9px", borderRadius: 6, fontSize: 11, display: "flex", alignItems: "center", gap: 3 }}>
+                          <Icon name="restore" size={12} /> Restore
+                        </button>
+                        <button className="btn" onClick={() => handleDelete(m.id)} style={{ background: `${theme.danger}15`, color: theme.danger, padding: "5px 9px", borderRadius: 6, fontSize: 11, display: "flex", alignItems: "center", gap: 3 }} title="Delete member permanently">
+                          <Icon name="trash" size={12} /> Delete
+                        </button>
+                      </>
                     )}
                   </div>
                 </td>
@@ -442,7 +587,7 @@ function MembersView({ members, setMembers, theme, showNotif, currentUser, onVie
       {/* Add/Edit Modal */}
       {showModal && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: 26, width: "100%", maxWidth: 460, maxHeight: "90vh", overflowY: "auto" }}>
+          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: 26, width: "100%", maxWidth: 700, maxHeight: "90vh", overflowY: "auto" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
               <h2 style={{ fontSize: 16, fontWeight: 600 }}>{editMember ? "Edit Member" : "Add New Member"}</h2>
               <button className="btn" onClick={() => setShowModal(false)} style={{ background: "transparent", color: theme.textMuted, padding: 4 }}><Icon name="close" size={18} /></button>
@@ -459,26 +604,34 @@ function MembersView({ members, setMembers, theme, showNotif, currentUser, onVie
                 {form.photo && <button className="btn" onClick={() => setForm(f => ({ ...f, photo: null }))} style={{ marginLeft: 8, background: "transparent", color: theme.danger, fontSize: 11, padding: 0 }}>Remove</button>}
               </div>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
-              {[["Full Name *", "name", "text"], ["Contact Number", "contact", "tel"]].map(([lbl, key, type]) => (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 13 }}>
+              {[["Full Name *", "name", "text"], ["Contact Info", "contact", "text"]].map(([lbl, key, type]) => (
                 <div key={key}>
                   <label>{lbl}</label>
-                  <input type={type} value={form[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} placeholder={lbl.replace(" *", "")} />
+                  <input type={type} value={form[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} placeholder={key === "contact" ? "Contact number, Facebook name, or email" : lbl.replace(" *", "")} />
                 </div>
               ))}
               <div>
                 <label>Joined Date</label>
-                <input type="date" value={form.joined || ""} onChange={e => setForm(f => ({ ...f, joined: e.target.value }))} />
+                <input type="text" value={form.joined || ""} onChange={e => setForm(f => ({ ...f, joined: e.target.value }))} placeholder="YYYY or YYYY-MM or YYYY-MM-DD" />
+                <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 4 }}>Leave blank if joined date is unknown. Use exact date or partial date when the exact day is unknown.</div>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              {!editMember && (
                 <div>
-                  <label>Birthday</label>
-                  <input type="date" value={form.birthday} onChange={e => setForm(f => ({ ...f, birthday: e.target.value }))} />
+                  <label>Member Came From (Event/Service)</label>
+                  <select value={form.sourceEventId || ""} onChange={e => setForm(f => ({ ...f, sourceEventId: e.target.value }))}>
+                    <option value="">Unknown</option>
+                    {events.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                  </select>
                 </div>
-                <div>
-                  <label>Wedding Anniversary</label>
-                  <input type="date" value={form.anniversary} onChange={e => setForm(f => ({ ...f, anniversary: e.target.value }))} />
-                </div>
+              )}
+              <div>
+                <label>Birthday</label>
+                <input type="date" value={form.birthday} onChange={e => setForm(f => ({ ...f, birthday: e.target.value }))} />
+              </div>
+              <div>
+                <label>Wedding Anniversary</label>
+                <input type="date" value={form.anniversary} onChange={e => setForm(f => ({ ...f, anniversary: e.target.value }))} />
               </div>
               <div>
                 <label>Age Group</label>
@@ -488,10 +641,11 @@ function MembersView({ members, setMembers, theme, showNotif, currentUser, onVie
                 </select>
               </div>
               <div>
-                <label>Ministry / Group</label>
-                <select value={form.ministry} onChange={e => setForm(f => ({ ...f, ministry: e.target.value }))}>
-                  <option value="">Select Ministry</option>
-                  {["Worship Team", "Youth Ministry", "Children's Church", "Prayer Team", "Media Team", "Ushers", "Deacons", "Women's Ministry"].map(m => <option key={m}>{m}</option>)}
+                <label>Gender</label>
+                <select value={form.gender} onChange={e => setForm(f => ({ ...f, gender: e.target.value }))}>
+                  <option value="">Select Gender</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
                 </select>
               </div>
               <div>
@@ -499,6 +653,35 @@ function MembersView({ members, setMembers, theme, showNotif, currentUser, onVie
                 <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
                   <option>Active</option><option>Inactive</option>
                 </select>
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label>Ministry / Group</label>
+                <div style={{ border: `1px solid ${theme.border}`, borderRadius: 8, padding: 10, background: theme.surface2, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  {MINISTRY_OPTIONS.map((ministry) => {
+                    const checked = form.ministry.includes(ministry);
+                    return (
+                      <label key={ministry} style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 0, textTransform: "none", letterSpacing: 0, fontSize: 12, color: theme.text, cursor: "pointer" }}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() =>
+                            setForm((f) => ({
+                              ...f,
+                              ministry: checked
+                                ? f.ministry.filter((item) => item !== ministry)
+                                : [...f.ministry, ministry],
+                            }))
+                          }
+                          style={{ accentColor: theme.accent, cursor: "pointer" }}
+                        />
+                        {ministry}
+                      </label>
+                    );
+                  })}
+                </div>
+                <div style={{ marginTop: 6, fontSize: 11, color: theme.textMuted }}>
+                  You can choose one or more ministries.
+                </div>
               </div>
             </div>
             <div style={{ display: "flex", gap: 9, marginTop: 22, justifyContent: "flex-end" }}>
@@ -523,13 +706,13 @@ function MembersView({ members, setMembers, theme, showNotif, currentUser, onVie
                 Your CSV file must include these columns (in any order):<br />
                 <code style={{ background: theme.surface2, padding: "2px 6px", borderRadius: 4, fontSize: 11 }}>name, contact, ministry, status</code><br />
                 Optional:<br />
-                <code style={{ background: theme.surface2, padding: "2px 6px", borderRadius: 4, fontSize: 11 }}>joined</code> (yyyy-mm-dd)
+                <code style={{ background: theme.surface2, padding: "2px 6px", borderRadius: 4, fontSize: 11 }}>joined</code> (yyyy, yyyy-mm, or yyyy-mm-dd)
                 The first row must be column headers.
               </div>
             </div>
             {/* Download sample */}
             <button className="btn" onClick={() => {
-              const blob = new Blob(["name,contact,ministry,status,joined\nJohn Doe,09123456789,Worship Team,Active,2026-04-01\nJane Smith,09987654321,Youth Ministry,Active,2026-04-03"], { type: "text/csv" });
+              const blob = new Blob(["name,contact,ministry,status,joined\nJohn Doe,09123456789,Worship Team,Active,2026-04-01\nJane Smith,09987654321,Youth Ministry,Active,2026-04"], { type: "text/csv" });
               const url = URL.createObjectURL(blob);
               const a = document.createElement("a"); a.href = url; a.download = "sample_members.csv"; a.click();
             }} style={{ background: theme.surface2, color: theme.textMuted, padding: "8px 14px", borderRadius: 8, fontSize: 12, display: "flex", alignItems: "center", gap: 6, marginBottom: 16, border: `1px solid ${theme.border}` }}>
@@ -553,7 +736,7 @@ function MembersView({ members, setMembers, theme, showNotif, currentUser, onVie
 // ─── BULK PRINT MODAL ─────────────────────────────────────────────────────────
 function BulkPrintModal({ members, theme, showNotif, onClose }) {
   const activeMembers = members.filter(m => !m.archived);
-  const ministries = [...new Set(activeMembers.map(m => m.ministry).filter(Boolean))].sort();
+  const ministries = [...new Set(activeMembers.flatMap(m => splitMinistries(m.ministry)))].sort();
 
   const [filterMinistry, setFilterMinistry] = useState("All");
   const [filterStatus, setFilterStatus] = useState("Active");
@@ -564,7 +747,7 @@ function BulkPrintModal({ members, theme, showNotif, onClose }) {
   const isFirstLoad = useRef(true);
 
   const filtered = activeMembers.filter(m => {
-    if (filterMinistry !== "All" && m.ministry !== filterMinistry) return false;
+    if (filterMinistry !== "All" && !splitMinistries(m.ministry).includes(filterMinistry)) return false;
     if (filterStatus !== "All" && m.status !== filterStatus) return false;
     if (filterJoinedFrom && m.joined && m.joined < filterJoinedFrom) return false;
     if (filterJoinedTo && m.joined && m.joined > filterJoinedTo) return false;
@@ -604,7 +787,7 @@ function BulkPrintModal({ members, theme, showNotif, onClose }) {
       return {
         name: m.name,
         id: m.id,
-        ministry: m.ministry || "",
+        ministry: formatMinistry(m.ministry) || "",
         status: m.status,
         joined: m.joined || "—",
         qrDataUrl: dataUrl
@@ -617,7 +800,13 @@ function BulkPrintModal({ members, theme, showNotif, onClose }) {
   <meta charset="UTF-8">
   <title>QR Cards - TLOB</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
     
     body {
       font-family: "Inter", system-ui, sans-serif;
@@ -657,10 +846,11 @@ function BulkPrintModal({ members, theme, showNotif, onClose }) {
       align-items: center;
       gap: 10px;
       width: 100%;
-      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      background: #1e293b;
       color: white;
       padding: 6px 8px;
       border-radius: 5px;
+      border: 1px solid #0f172a;
     }
     
     .card-logo {
@@ -751,6 +941,7 @@ function BulkPrintModal({ members, theme, showNotif, onClose }) {
       font-weight: 600;
       font-size: 12px;
       padding: 1px 6px;
+      min-height: 18px;
     }
     
     .card-footer {
@@ -765,16 +956,30 @@ function BulkPrintModal({ members, theme, showNotif, onClose }) {
     }
     
     .dot {
-      display: inline-block;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       width: 5px;
       height: 5px;
       border-radius: 50%;
       margin-right: 3px;
       vertical-align: middle;
+      border: 0.75px solid currentColor;
     }
     
-    .dot-active { background: #10b981; }
-    .dot-inactive { background: #ef4444; }
+    .dot-active { background: #10b981; color: #10b981; }
+    .dot-inactive { background: #ef4444; color: #ef4444; }
+
+    @media print {
+      body { margin: 0 !important; }
+      .card-header,
+      .tag-status,
+      .dot-active,
+      .dot-inactive {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+    }
   </style>
 </head>
 <body>
@@ -800,7 +1005,7 @@ function BulkPrintModal({ members, theme, showNotif, onClose }) {
               ${card.status}
             </div>
           </div>
-          <div class="card-footer">Gamitin ito para sa iyong Weekly Attendance.</div>
+          <div class="card-footer">Gamitin para sa iyong Weekly Attendance.</div>
         </div>
       </div>
     `).join("")}
@@ -891,7 +1096,7 @@ function BulkPrintModal({ members, theme, showNotif, onClose }) {
                   <Avatar member={m} size={30} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: theme.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.name}</div>
-                    <div style={{ fontSize: 11, color: theme.textMuted }}>{m.ministry || "No Ministry"}</div>
+                    <div style={{ fontSize: 11, color: theme.textMuted }}>{formatMinistry(m.ministry) || "No Ministry"}</div>
                   </div>
                   <div style={{ textAlign: "right", flexShrink: 0 }}>
                     <code style={{ fontSize: 10, background: theme.surface2, padding: "2px 6px", borderRadius: 4, color: theme.textMuted, fontFamily: "DM Mono,monospace" }}>{m.id}</code>

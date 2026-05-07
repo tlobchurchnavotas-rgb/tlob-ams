@@ -1,5 +1,5 @@
 const path = require("path");
-const { app, BrowserWindow, shell, ipcMain } = require("electron");
+const { app, BrowserWindow, Menu, shell, ipcMain } = require("electron");
 const { autoUpdater } = require("electron-updater");
 
 const isDev = !app.isPackaged;
@@ -26,6 +26,7 @@ function createMainWindow() {
     backgroundColor: "#0b1220",
     show: false,
     icon: iconPath,
+    autoHideMenuBar: true,
     webPreferences: {
       preload: resolveAssetPath("electron", "preload.js"),
       nodeIntegration: false,
@@ -34,12 +35,17 @@ function createMainWindow() {
     },
   });
 
+  Menu.setApplicationMenu(null);
+  win.setMenuBarVisibility(false);
   mainWindow = win;
 
   win.once("ready-to-show", () => win.show());
 
-  // Open external links in the system browser.
+  // Keep app-created print/export popups inside Electron, and only open real external links in browser.
   win.webContents.setWindowOpenHandler(({ url }) => {
+    if (url === "about:blank" || url.startsWith("data:") || url.startsWith("blob:")) {
+      return { action: "allow" };
+    }
     shell.openExternal(url);
     return { action: "deny" };
   });

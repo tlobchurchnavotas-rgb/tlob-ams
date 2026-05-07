@@ -31,7 +31,19 @@ function VisitorsView({ visitors, setVisitors, members, setMembers, events, them
   const handleConvert = async v => {
     const ids = members.map(m => parseInt(m.id.slice(1))).filter(n => !isNaN(n));
     const newId = `M${String(ids.length > 0 ? Math.max(...ids) + 1 : 1).padStart(3, "0")}`;
-    const member = { id: newId, name: v.name, contact: v.contact, ministry: "", status: "Active", joined: v.date, photo: null, archived: false, birthday: "", anniversary: "" };
+    const member = {
+      id: newId,
+      name: v.name,
+      contact: v.contact,
+      ministry: "",
+      status: "Active",
+      joined: v.date,
+      sourceEventId: v.eventId || "",
+      photo: null,
+      archived: false,
+      birthday: "",
+      anniversary: "",
+    };
     setMembers(prev => [...prev, member]);
     setVisitors(prev => prev.map(x => x.id === v.id ? { ...x, convertedToMember: true } : x));
     showNotif(`${v.name} converted to member!`);

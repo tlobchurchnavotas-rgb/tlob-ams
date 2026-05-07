@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Icon } from "./Icon.jsx";
-import { EVENT_TEMPLATES } from "../constants.js";
+import { EVENT_TEMPLATES, usePersisted } from "../constants.js";
 import { canManageChurchData } from "../roles.js";
 import { recordAuditLog } from "../auditLogs.js";
 
@@ -12,7 +12,7 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, the
   const [showEditTemplate, setShowEditTemplate] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState(null);
   const [templateForm, setTemplateForm] = useState({ name: "", type: "Weekly Service", time: "" });
-  const [templates, setTemplates] = useState(EVENT_TEMPLATES);
+  const [templates, setTemplates] = usePersisted("event_templates", EVENT_TEMPLATES, currentUser?.id ?? null);
   const [form, setForm] = useState({ name: "", type: "Weekly Service", date: "", time: "", status: "Upcoming" });
   const [editEvent, setEditEvent] = useState(null); // null | event row
   const [searchQuery, setSearchQuery] = useState("");
@@ -30,17 +30,29 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, the
     setShowEditTemplate(true);
   };
 
+  const openCreateTemplate = () => {
+    setEditingTemplate(null);
+    setTemplateForm({ name: "", type: "Weekly Service", time: "" });
+    setShowEditTemplate(true);
+  };
+
   const handleSaveTemplate = () => {
     if (!templateForm.name || !templateForm.type || !templateForm.time) {
       showNotif("Please fill all fields", "error");
       return;
     }
+
     const updated = [...templates];
-    updated[editingTemplate] = templateForm;
+    if (editingTemplate === null) {
+      updated.push(templateForm);
+    } else {
+      updated[editingTemplate] = templateForm;
+    }
     setTemplates(updated);
-    showNotif("Template updated");
+    showNotif(editingTemplate === null ? "Template added" : "Template updated");
     setShowEditTemplate(false);
     setEditingTemplate(null);
+    setTemplateForm({ name: "", type: "Weekly Service", time: "" });
   };
 
   const deleteTemplate = (idx) => {
@@ -328,7 +340,26 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, the
           <div className="modal-box" onClick={e => e.stopPropagation()} style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: 26, width: "100%", maxWidth: 440 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
               <h2 style={{ fontSize: 16, fontWeight: 600 }}>Event Templates</h2>
-              <button className="btn" onClick={() => setShowTemplates(false)} style={{ background: "transparent", color: theme.textMuted, padding: 4 }}><Icon name="close" size={18} /></button>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <button
+                  className="btn"
+                  onClick={openCreateTemplate}
+                  style={{
+                    background: `${theme.accent}18`,
+                    color: theme.accent,
+                    padding: "6px 10px",
+                    borderRadius: 8,
+                    fontSize: 12,
+                    border: `1px solid ${theme.accent}35`,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  <Icon name="add" size={13} /> Add Template
+                </button>
+                <button className="btn" onClick={() => setShowTemplates(false)} style={{ background: "transparent", color: theme.textMuted, padding: 4 }}><Icon name="close" size={18} /></button>
+              </div>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
               {templates.map((t, i) => (
@@ -357,7 +388,7 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, the
         <div className="modal-overlay" onClick={() => setShowEditTemplate(false)}>
           <div className="modal-box" onClick={e => e.stopPropagation()} style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: 26, width: "100%", maxWidth: 440 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
-              <h2 style={{ fontSize: 16, fontWeight: 600 }}>Edit Template</h2>
+              <h2 style={{ fontSize: 16, fontWeight: 600 }}>{editingTemplate === null ? "Add Template" : "Edit Template"}</h2>
               <button className="btn" onClick={() => setShowEditTemplate(false)} style={{ background: "transparent", color: theme.textMuted, padding: 4 }}><Icon name="close" size={18} /></button>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
@@ -372,7 +403,9 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, the
             </div>
             <div style={{ display: "flex", gap: 9, marginTop: 22, justifyContent: "flex-end" }}>
               <button className="btn" onClick={() => setShowEditTemplate(false)} style={{ background: theme.surface2, color: theme.text, padding: "8px 16px", borderRadius: 8, fontSize: 13 }}>Cancel</button>
-              <button className="btn" onClick={handleSaveTemplate} style={{ background: theme.accent, color: "white", padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 500 }}>Save</button>
+              <button className="btn" onClick={handleSaveTemplate} style={{ background: theme.accent, color: "white", padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 500 }}>
+                {editingTemplate === null ? "Add" : "Save"}
+              </button>
             </div>
           </div>
         </div>
@@ -432,7 +465,7 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, the
       {/* Attendance Modal */}
       {showAttendanceModal && selectedEventForAttendance && (
         <div className="modal-overlay" onClick={() => setShowAttendanceModal(false)}>
-          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: 26, width: "100%", maxWidth: 900 }}>
+          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: 26, width: "100%", maxWidth: 900, maxHeight: "90vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
               <div>
                 <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>{selectedEventForAttendance.name}</h2>
@@ -481,7 +514,7 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, the
             </div>
 
             {/* Attendance Table */}
-            <div style={{ overflowX: "auto" }}>
+            <div style={{ overflowX: "auto", overflowY: "auto", flex: 1, minHeight: 0 }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
                   <tr style={{ borderBottom: `1px solid ${theme.border}` }}>

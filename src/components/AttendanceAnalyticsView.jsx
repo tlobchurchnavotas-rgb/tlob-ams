@@ -342,12 +342,12 @@ function AttendanceAnalyticsView({ attendance, members, events, theme }) {
               Weekly and monthly summaries with comparison and percentage change.
             </div>
           </div>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <div style={{ minWidth: 180 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, width: "100%" }}>
+            <div>
               <label>Reference date</label>
               <input type="date" value={refDate} onChange={(e) => setRefDate(e.target.value)} />
             </div>
-            <div style={{ minWidth: 180 }}>
+            <div>
               <label>Week starts on</label>
               <select value={weekStartsOn} onChange={(e) => setWeekStartsOn(Number(e.target.value))}>
                 <option value={1}>Monday</option>
@@ -374,8 +374,8 @@ function AttendanceAnalyticsView({ attendance, members, events, theme }) {
               Choose a weekly service, then compare Week A vs Week B.
             </div>
           </div>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
-            <div style={{ minWidth: 260 }}>
+          <div style={{ display: "grid", gap: 10, width: "100%" }}>
+            <div style={{ maxWidth: 520 }}>
               <label>Weekly service / event</label>
               <select
                 value={compare.selectedKey}
@@ -388,13 +388,15 @@ function AttendanceAnalyticsView({ attendance, members, events, theme }) {
                 ))}
               </select>
             </div>
-            <div style={{ minWidth: 180 }}>
-              <label>Week A (any date)</label>
-              <input type="date" value={compareWeekA} onChange={(e) => setCompareWeekA(e.target.value)} />
-            </div>
-            <div style={{ minWidth: 180 }}>
-              <label>Week B (any date)</label>
-              <input type="date" value={compareWeekB} onChange={(e) => setCompareWeekB(e.target.value)} />
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, width: "100%", alignItems: "end" }}>
+              <div>
+                <label>Week A (any date)</label>
+                <input type="date" value={compareWeekA} onChange={(e) => setCompareWeekA(e.target.value)} />
+              </div>
+              <div>
+                <label>Week B (any date)</label>
+                <input type="date" value={compareWeekB} onChange={(e) => setCompareWeekB(e.target.value)} />
+              </div>
             </div>
           </div>
         </div>

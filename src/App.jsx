@@ -17,7 +17,6 @@ import MembersView from "./components/MembersView.jsx";
 import MemberProfile from "./components/MemberProfile.jsx";
 import EventsView from "./components/EventsView.jsx";
 import ScannerView from "./components/ScannerView.jsx";
-import AttendanceView from "./components/AttendanceView.jsx";
 import ReportsView from "./components/ReportsView.jsx";
 import AttendanceAnalyticsView from "./components/AttendanceAnalyticsView.jsx";
 import MemberHistoryView from "./components/MemberHistoryView.jsx";
@@ -221,7 +220,6 @@ export default function TLOBApp() {
     { id: "visitors", icon: "profile", label: "Visitors" },
     { id: "celebrations", icon: "church", label: "Celebrations" },
     ...(canAccessStaffFeatures(currentUser?.role) ? [
-      { id: "reports", icon: "report", label: "Reports" },
       { id: "attendanceAnalytics", icon: "analytics", label: "Attendance Analytics" },
       { id: "memberHistory", icon: "profile", label: "Member History" },
     ] : []),
@@ -240,7 +238,7 @@ export default function TLOBApp() {
 
     const main = pick(["dashboard"]);
     const management = pick(["members", "events", "scanner", "attendance", "visitors", "celebrations"]);
-    const analytics = pick(["reports", "attendanceAnalytics", "memberHistory"]);
+    const analytics = pick(["attendanceAnalytics", "memberHistory"]);
     const adminTools = pick(["accountManagement", "auditLogs", "adminSettings"]);
 
     return [
@@ -412,7 +410,7 @@ export default function TLOBApp() {
           )}
           <div style={{ flex: 1 }}>
             <h1 style={{ fontSize: 18, fontWeight: 1000, letterSpacing: "-.02em", color: theme.text }}>
-              {profileMember ? "Member Profile" : { dashboard: "Dashboard", members: "Members", events: "Events", scanner: "QR Scanner", attendance: "Attendance Logs", reports: "Reports", attendanceAnalytics: "Attendance Analytics", memberHistory: "Member Attendance History", accountManagement: "Account Management", auditLogs: "Audit Logs", usermgmt: "User Management", visitors: "Visitor Tracking", celebrations: "Celebrations", adminSettings: "Settings" }[activeView]}
+              {profileMember ? "Member Profile" : { dashboard: "Dashboard", members: "Members", events: "Events", scanner: "QR Scanner", attendance: "Attendance Reports", attendanceAnalytics: "Attendance Analytics", memberHistory: "Member Attendance History", accountManagement: "Account Management", auditLogs: "Audit Logs", usermgmt: "User Management", visitors: "Visitor Tracking", celebrations: "Celebrations", adminSettings: "Settings" }[activeView]}
             </h1>
             <div style={{ fontSize: 11, fontWeight: 500, color: theme.textMuted, marginTop: 1 }}>
               Welcome to TLOB AMS • {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
@@ -482,7 +480,7 @@ export default function TLOBApp() {
           {profileMember
             ? <MemberProfile member={profileMember} members={members} attendance={attendance} events={events} theme={theme} onClose={() => setProfileMember(null)} showNotif={showNotif} />
             : activeView === "dashboard" ? <DashboardView members={members} events={events} attendance={attendance} theme={theme} />
-            : activeView === "members" ? <MembersView members={members} setMembers={setMembers} theme={theme} showNotif={showNotif} currentUser={currentUser} onViewProfile={setProfileMember} />
+            : activeView === "members" ? <MembersView members={members} setMembers={setMembers} events={events} theme={theme} showNotif={showNotif} currentUser={currentUser} onViewProfile={setProfileMember} />
             : activeView === "events" ? <EventsView events={events} setEvents={setEvents} attendance={attendance} setAttendance={setAttendance} members={members} theme={theme} showNotif={showNotif} currentUser={currentUser} />
             : activeView === "scanner" ? <ScannerView members={members} events={events} attendance={attendance} setAttendance={setAttendance} theme={theme} showNotif={showNotif} currentUser={currentUser} onLaunchKiosk={async (evId) => {
               // Best-effort: request fullscreen on the user gesture that launches kiosk mode.
@@ -490,8 +488,7 @@ export default function TLOBApp() {
               setKioskEvent(evId);
               setKioskMode(true);
             }} />
-            : activeView === "attendance" ? <AttendanceView attendance={attendance} members={members} events={events} theme={theme} onViewProfile={setProfileMember} />
-            : activeView === "reports" ? <ReportsView attendance={attendance} members={members} events={events} theme={theme} showNotif={showNotif} />
+            : activeView === "attendance" ? <ReportsView attendance={attendance} members={members} events={events} theme={theme} showNotif={showNotif} />
             : activeView === "attendanceAnalytics" ? <AttendanceAnalyticsView attendance={attendance} members={members} events={events} theme={theme} />
             : activeView === "memberHistory" ? <MemberHistoryView attendance={attendance} members={members} events={events} theme={theme} showNotif={showNotif} />
             : activeView === "visitors" ? <VisitorsView visitors={visitors} setVisitors={setVisitors} members={members} setMembers={setMembers} events={events} theme={theme} showNotif={showNotif} currentUser={currentUser} />
