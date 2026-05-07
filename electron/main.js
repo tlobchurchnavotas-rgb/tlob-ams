@@ -10,6 +10,17 @@ autoUpdater.checkForUpdatesAndNotify = false; // We'll handle notifications manu
 autoUpdater.autoDownload = false; // Don't auto-download, let user decide
 autoUpdater.autoInstallOnAppQuit = true; // Install update when app quits
 
+// Configure GitHub token for private repository access
+const githubToken = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+if (githubToken) {
+  console.log("Using GitHub token for private release access.");
+  autoUpdater.requestHeaders = {
+    Authorization: `token ${githubToken}`
+  };
+} else {
+  console.log("No GitHub token found for autoUpdater. Private releases will be inaccessible.");
+}
+
 function resolveAssetPath(...parts) {
   // In dev, assets live in project root. In production, Electron loads from the installed app resources.
   return path.join(app.getAppPath(), ...parts);
