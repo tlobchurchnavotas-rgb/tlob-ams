@@ -428,9 +428,9 @@ function MembersView({ members, setMembers, events, theme, showNotif, currentUse
       const newMembers = lines.slice(1).map(line => {
         const cols = line.split(",").map(c => c.trim().replace(/^"|"$/g, ""));
         const id = `M${String(nextNum++).padStart(3, "0")}`;
-        const today = new Date().toISOString().split("T")[0];
         const joinedRaw = joinedIdx >= 0 ? (cols[joinedIdx] || "").trim() : "";
-      const joined = normalizeJoinedDate(joinedRaw) || "";
+        const today = new Date().toISOString().split("T")[0];
+        const joined = normalizeJoinedDate(joinedRaw) || today;
         return { id, name: cols[nameIdx] || "Unknown", contact: contactIdx >= 0 ? cols[contactIdx] : "", ministry: ministryIdx >= 0 ? cols[ministryIdx] : "", status: statusIdx >= 0 ? cols[statusIdx] : "Active", joined, sourceEventId: "", photo: null, archived: false };
       }).filter(m => m.name && m.name !== "Unknown");
       setMembers(prev => [...prev, ...newMembers]);
