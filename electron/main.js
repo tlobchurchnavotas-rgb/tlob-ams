@@ -1,4 +1,5 @@
 const path = require("path");
+const express = require("express");
 const { app, BrowserWindow, Menu, shell, ipcMain } = require("electron");
 const { autoUpdater } = require("electron-updater");
 const dotenv = require('dotenv');
@@ -8,6 +9,7 @@ dotenv.config({ path: path.join(app.getAppPath(), '.env') });
 
 const isDev = !app.isPackaged;
 let mainWindow = null;
+let webServer = null;
 
 // Configure auto-updater
 autoUpdater.checkForUpdatesAndNotify = false; // We'll handle notifications manually
@@ -40,6 +42,28 @@ if (githubToken) {
 function resolveAssetPath(...parts) {
   // In dev, assets live in project root. In production, Electron loads from the installed app resources.
   return path.join(app.getAppPath(), ...parts);
+}
+
+function startWebServer() {
+  if (isDev) return; // Web server not needed in dev mode (React dev server is used)
+  
+  const expressApp = express();
+  const buildPath = resolveAssetPath("build");
+  
+  // Serve static files from build directory
+  expressApp.use(express.static(buildPath));
+  
+  // Handle SPA routing - serve index.html for all non-static requests
+  expressApp.get("*", (req, res) => {
+    res.sendFile(path.join(buildPath, "index.html"));
+  });
+  
+  return new Promise((resolve) => {
+    webServer = expressApp.listen(3000, "0.0.0.0", () => {
+      console.log("Web server running on http://0.0.0.0:3000 for remote access");
+      resolve();
+    });
+  });
 }
 
 function createMainWindow() {
@@ -155,7 +179,8 @@ ipcMain.on("install-update", () => {
   autoUpdater.quitAndInstall();
 });
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  await startWebServer();
   createMainWindow();
 
   app.on("activate", () => {
@@ -165,6 +190,7 @@ app.whenReady().then(() => {
 
 app.on("window-all-closed", () => {
   // On macOS, apps stay active until Cmd+Q. For Windows (your target), quit when all windows close.
+  if (webServer) webServer.close();
   if (process.platform !== "darwin") app.quit();
 });
 
