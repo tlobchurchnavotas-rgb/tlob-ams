@@ -1,6 +1,10 @@
 const path = require("path");
 const { app, BrowserWindow, Menu, shell, ipcMain } = require("electron");
 const { autoUpdater } = require("electron-updater");
+const dotenv = require('dotenv');
+
+// Load environment variables from .env file in the app directory
+dotenv.config({ path: path.join(app.getAppPath(), '.env') });
 
 const isDev = !app.isPackaged;
 let mainWindow = null;

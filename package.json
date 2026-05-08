@@ -6,6 +6,7 @@
   "private": true,
   "dependencies": {
     "@supabase/supabase-js": "^2.102.0",
+    "dotenv": "^17.4.2",
     "electron-updater": "^6.8.3",
     "qrcode": "^1.5.4",
     "react": "^18.2.0",
@@ -45,7 +46,8 @@
       "build/**/*",
       "electron/**/*",
       "node_modules/**/*",
-      "package.json"
+      "package.json",
+      ".env"
     ],
     "asar": true,
     "publish": {
