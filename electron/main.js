@@ -14,15 +14,27 @@ autoUpdater.checkForUpdatesAndNotify = false; // We'll handle notifications manu
 autoUpdater.autoDownload = false; // Don't auto-download, let user decide
 autoUpdater.autoInstallOnAppQuit = true; // Install update when app quits
 
+const GITHUB_PUBLISH_INFO = {
+  provider: "github",
+  owner: "tlobchurchnavotas-rgb",
+  repo: "tlob-ams",
+};
+
 // Configure GitHub token for private repository access
 const githubToken = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
 if (githubToken) {
   console.log("Using GitHub token for private release access.");
   autoUpdater.requestHeaders = {
-    Authorization: `token ${githubToken}`
+    Authorization: `token ${githubToken}`,
   };
+  autoUpdater.setFeedURL({
+    ...GITHUB_PUBLISH_INFO,
+    private: true,
+    token: githubToken,
+  });
 } else {
   console.log("No GitHub token found for autoUpdater. Private releases will be inaccessible.");
+  autoUpdater.setFeedURL(GITHUB_PUBLISH_INFO);
 }
 
 function resolveAssetPath(...parts) {
@@ -118,7 +130,12 @@ ipcMain.handle("check-for-updates", async () => {
     return result;
   } catch (error) {
     console.error("Update check error:", error);
-    return { updateAvailable: false, error: error.message };
+    const message = String(error?.message || error);
+    const needsToken = !githubToken && /Unable to find latest version on GitHub|404/.test(message);
+    const friendlyError = needsToken
+      ? "Auto-update requires a valid GitHub token (GITHUB_TOKEN or GH_TOKEN) for private repos, or a public GitHub release tagged as latest."
+      : message;
+    return { updateAvailable: false, error: friendlyError };
   }
 });
 
