@@ -81,9 +81,25 @@ function formatJoinedForDisplay(value) {
 // ─── PERSISTENT STORAGE HOOK ──────────────────────────────────────────────────
 function usePersisted(key, initial, ownerId = null) {
   const storageKey = "tlob_" + key;
-  const [val, setVal] = useState(initial);
+  const userModifiedRef = useRef(false);
+  const [val, setVal] = useState(() => {
+    if (!isSupabaseConfigured || !supabase || !ownerId) {
+      try {
+        const stored = localStorage.getItem(storageKey);
+        return stored ? JSON.parse(stored) : initial;
+      } catch {
+        return initial;
+      }
+    }
+    return initial;
+  });
   const [hydrated, setHydrated] = useState(false);
   const saveTimerRef = useRef(null);
+
+  const setValWithUserAction = useCallback((next) => {
+    userModifiedRef.current = true;
+    setVal(next);
+  }, [setVal]);
 
   useEffect(() => {
     let cancelled = false;
@@ -102,8 +118,10 @@ function usePersisted(key, initial, ownerId = null) {
 
       if (!isSupabaseConfigured || !supabase || !ownerId) {
         const next = hydrateFromLocalStorage();
-        if (!cancelled) {
+        if (!cancelled && !userModifiedRef.current) {
           setVal(next);
+        }
+        if (!cancelled) {
           setHydrated(true);
         }
         return;
@@ -120,15 +138,19 @@ function usePersisted(key, initial, ownerId = null) {
         if (error) throw error;
 
         const next = data?.value ?? initial;
-        if (!cancelled) {
+        if (!cancelled && !userModifiedRef.current) {
           setVal(next);
+        }
+        if (!cancelled) {
           setHydrated(true);
         }
       } catch {
         // If Supabase is misconfigured/offline, fall back gracefully.
         const next = hydrateFromLocalStorage();
-        if (!cancelled) {
+        if (!cancelled && !userModifiedRef.current) {
           setVal(next);
+        }
+        if (!cancelled) {
           setHydrated(true);
         }
       }
@@ -170,7 +192,7 @@ function usePersisted(key, initial, ownerId = null) {
     };
   }, [hydrated, ownerId, storageKey, val]);
 
-  return [val, setVal];
+  return [val, setValWithUserAction];
 }
 
 // ─── TABLE-BACKED STORAGE HOOK (Supabase) ─────────────────────────────────────

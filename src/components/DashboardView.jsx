@@ -694,6 +694,7 @@ function SearchableEventSelect({ events, value, onChange, theme, allLabel }) {
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0, width: 0 });
   const wrapRef = useRef(null);
   const inputRef = useRef(null);
+  const menuRef = useRef(null);
 
   const selectedLabel = useMemo(() => {
     if (value === "all") return allLabel;
@@ -725,19 +726,18 @@ function SearchableEventSelect({ events, value, onChange, theme, allLabel }) {
     };
     updatePos();
     const onDocClick = (evt) => {
-      if (!wrapRef.current?.contains(evt.target)) setOpen(false);
+      if (!wrapRef.current?.contains(evt.target) && !menuRef.current?.contains(evt.target)) {
+        setOpen(false);
+      }
     };
     const onEsc = (evt) => {
       if (evt.key === "Escape") setOpen(false);
     };
-    window.addEventListener("resize", updatePos);
-    window.addEventListener("scroll", updatePos, true);
-    document.addEventListener("mousedown", onDocClick);
+    // Use click instead of mousedown to allow onClick handlers to fire first
+    document.addEventListener("click", onDocClick);
     document.addEventListener("keydown", onEsc);
     return () => {
-      window.removeEventListener("resize", updatePos);
-      window.removeEventListener("scroll", updatePos, true);
-      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("click", onDocClick);
       document.removeEventListener("keydown", onEsc);
     };
   }, [open]);
@@ -775,6 +775,7 @@ function SearchableEventSelect({ events, value, onChange, theme, allLabel }) {
       </button>
       {open && createPortal(
         <div
+          ref={menuRef}
           style={{
             position: "absolute",
             zIndex: 99999,

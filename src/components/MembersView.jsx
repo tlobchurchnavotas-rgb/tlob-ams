@@ -48,6 +48,12 @@ function MembersView({ members, setMembers, events, theme, showNotif, currentUse
       const ministry = formatMinistry(m.ministry).toLowerCase();
       if (!name.includes(q) && !id.includes(q) && !contact.includes(q) && !ministry.includes(q)) return false;
     }
+    if (filterMinistry !== "All" && !splitMinistries(m.ministry).includes(filterMinistry)) {
+      return false;
+    }
+    if (filterAgeGroup !== "All" && (m.ageGroup || "") !== filterAgeGroup) {
+      return false;
+    }
     // Dates are stored as yyyy-mm-dd strings (ISO) so lexicographic compare works.
     if ((filterJoinedFrom || filterJoinedTo) && !isJoinedWithinFilter(m.joined, filterJoinedFrom, filterJoinedTo)) {
       return false;
@@ -517,14 +523,19 @@ function MembersView({ members, setMembers, events, theme, showNotif, currentUse
         >
           <Icon name="print" size={15} /> Export PDF
         </button>
-        <button
-          className="btn"
-          onClick={() => { setFilterMinistry("All"); setFilterAgeGroup("All"); setFilterJoinedFrom(""); setFilterJoinedTo(""); }}
-          style={{ background: theme.surface2, color: theme.textMuted, padding: "8px 14px", borderRadius: 8, fontSize: 13, border: `1px solid ${theme.border}`, display: "flex", alignItems: "center", gap: 6 }}
-          title="Clear filters"
-        >
-          <Icon name="close" size={15} /> Clear
-        </button>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
+          <button
+            className="btn"
+            onClick={() => { setFilterMinistry("All"); setFilterAgeGroup("All"); setFilterJoinedFrom(""); setFilterJoinedTo(""); }}
+            style={{ background: theme.surface2, color: theme.textMuted, padding: "8px 14px", borderRadius: 8, fontSize: 13, border: `1px solid ${theme.border}`, display: "flex", alignItems: "center", gap: 6 }}
+            title="Clear filters"
+          >
+            <Icon name="close" size={15} /> Clear
+          </button>
+          <div style={{ background: theme.surface2, color: theme.textMuted, padding: "9px 14px", borderRadius: 999, fontSize: 13, fontWeight: 600, border: `1px solid ${theme.border}` }}>
+            {visible.length} member{visible.length !== 1 ? "s" : ""}
+          </div>
+        </div>
       </div>
 
       <div className="card" style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 13, overflow: "hidden" }}>

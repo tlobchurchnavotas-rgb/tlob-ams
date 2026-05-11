@@ -21,6 +21,17 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, the
   const [attendanceSearchQuery, setAttendanceSearchQuery] = useState("");
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [templateToDelete, setTemplateToDelete] = useState(null);
+  const [collapsedYearsState, setCollapsedYearsState] = usePersisted("events_collapsed_years", [], currentUser?.id ?? null);
+  const [collapsedMonthsState, setCollapsedMonthsState] = usePersisted("events_collapsed_months", [], currentUser?.id ?? null);
+  const [collapsedWeeksState, setCollapsedWeeksState] = usePersisted("events_collapsed_weeks", [], currentUser?.id ?? null);
+  const collapsedYears = new Set(collapsedYearsState);
+  const collapsedMonths = new Set(collapsedMonthsState);
+  const collapsedWeeks = new Set(collapsedWeeksState);
+
+  const toggleCollapsed = (setter, key) => setter(prev => {
+    if (prev.includes(key)) return prev.filter(k => k !== key);
+    return [...prev, key];
+  });
 
   const applyTemplate = t => { setForm(f => ({ ...f, name: t.name, type: t.type, time: t.time })); setShowTemplates(false); setShowModal(true); };
 
@@ -189,6 +200,204 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, the
     ev.status.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const sortedEvents = [...filteredEvents].sort((a, b) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    return (a.time || "").localeCompare(b.time || "");
+  });
+
+  const getWeekLabel = (dateString) => {
+    const date = new Date(dateString);
+    const weekNumber = Math.floor((date.getDate() - 1) / 7) + 1;
+    return `Week ${weekNumber}`;
+  };
+
+  const groupedEvents = sortedEvents.reduce((acc, ev) => {
+    const date = new Date(ev.date);
+    if (Number.isNaN(date.getTime())) return acc;
+
+    const year = date.getFullYear();
+    const monthNumber = date.getMonth();
+    const monthName = date.toLocaleString(undefined, { month: "long" });
+    const weekLabel = getWeekLabel(ev.date);
+    const monthKey = `${year}-${monthNumber}`;
+
+    acc[year] = acc[year] || {};
+    acc[year][monthKey] = acc[year][monthKey] || { monthName, monthNumber, year, monthKey, weeks: {} };
+    acc[year][monthKey].weeks[weekLabel] = acc[year][monthKey].weeks[weekLabel] || [];
+    acc[year][monthKey].weeks[weekLabel].push(ev);
+    return acc;
+  }, {});
+
+  const renderEventCard = (ev, idx) => (
+    <div key={ev.id} className="card" style={{ background: theme.surface, border: `1px solid ${ev.status === "Active" ? theme.success + "50" : theme.border}`, borderRadius: 13, padding: 18, animationDelay: `${idx * .07}s` }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+        <div style={{ width: 40, height: 40, borderRadius: 9, background: `${theme.accent}18`, display: "flex", alignItems: "center", justifyContent: "center", color: theme.accent }}>
+          <Icon name="events" size={20} />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span className={`badge tag-${ev.status.toLowerCase()}`}>{ev.status}</span>
+          {canManageChurchData(currentUser.role) && (
+            <button
+              className="btn"
+              type="button"
+              onClick={() => openEdit(ev)}
+              title="Edit event"
+              style={{
+                background: theme.surface2,
+                color: theme.textMuted,
+                padding: "6px 8px",
+                borderRadius: 8,
+                border: `1px solid ${theme.border}`,
+                display: "inline-flex",
+                alignItems: "center",
+              }}
+            >
+              <Icon name="edit" size={14} />
+            </button>
+          )}
+        </div>
+      </div>
+      <div style={{ fontWeight: 600, fontSize: 14 }}>{ev.name}</div>
+      <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 3 }}>{ev.type}</div>
+      <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 5 }}>{ev.date} • {ev.time}</div>
+      {ev.status === "Completed" && (
+        <div style={{ fontSize: 12, color: theme.success, marginTop: 6, fontWeight: 500, display: "flex", alignItems: "center", gap: 5 }}>
+          <Icon name="check" size={14} /> {getAttendanceCount(ev.id)} attendance
+        </div>
+      )}
+      {canManageChurchData(currentUser.role) && (
+        <div style={{ display: "flex", gap: 7, marginTop: 14 }}>
+          {ev.status === "Upcoming" && <button className="btn" onClick={() => handleActivate(ev.id)} style={{ flex: 1, background: `${theme.success}15`, color: theme.success, padding: "6px", borderRadius: 7, fontSize: 12, fontWeight: 500 }}>Activate</button>}
+          {ev.status === "Active" && <button className="btn" onClick={() => handleComplete(ev.id)} style={{ flex: 1, background: `${theme.accent2}15`, color: theme.accent2, padding: "6px", borderRadius: 7, fontSize: 12, fontWeight: 500 }}>Complete</button>}
+          {ev.status === "Completed" && <button className="btn" onClick={() => openAttendanceModal(ev)} style={{ flex: 1, background: `${theme.accent}15`, color: theme.accent, padding: "6px", borderRadius: 7, fontSize: 12, fontWeight: 500 }}>View Attendance</button>}
+          {ev.status !== "Active" && <button className="btn" onClick={() => handleDelete(ev.id)} style={{ background: `${theme.danger}15`, color: theme.danger, padding: "6px 10px", borderRadius: 7 }}><Icon name="trash" size={14} /></button>}
+        </div>
+      )}
+    </div>
+  );
+
+  const orderedYears = Object.keys(groupedEvents).sort((a, b) => Number(b) - Number(a));
+  const orderedMonths = (months) => Object.values(months).sort((a, b) => a.monthNumber - b.monthNumber);
+  const orderedWeeks = (weeks) => Object.entries(weeks).sort((a, b) => {
+    const weekA = Number(a[0].replace(/[^0-9]/g, ""));
+    const weekB = Number(b[0].replace(/[^0-9]/g, ""));
+    return weekB - weekA;
+  });
+
+  const getYearEventCount = (year) => orderedMonths(groupedEvents[year]).reduce((sum, monthGroup) => {
+    return sum + Object.values(monthGroup.weeks).reduce((weekSum, weekEvents) => weekSum + weekEvents.length, 0);
+  }, 0);
+
+  const getMonthEventCount = (monthGroup) => Object.values(monthGroup.weeks).reduce((sum, weekEvents) => sum + weekEvents.length, 0);
+
+  const renderGroupedEvents = () => {
+    if (sortedEvents.length === 0) {
+      return (
+        <div style={{ padding: 22, borderRadius: 16, background: theme.surface2, border: `1px solid ${theme.border}`, color: theme.textMuted, textAlign: "center" }}>
+          No events found.
+        </div>
+      );
+    }
+
+    return orderedYears.map(year => (
+      <div key={year} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => toggleCollapsed(setCollapsedYearsState, year)}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") toggleCollapsed(setCollapsedYearsState, year); }}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            padding: "14px 18px",
+            borderRadius: 14,
+            background: theme.surface2,
+            border: `1px solid ${theme.border}`,
+            cursor: "pointer",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 15, fontWeight: 700 }}>
+            <span style={{ fontSize: 13 }}>{collapsedYears.has(year) ? "▶" : "▼"}</span>
+            {year}
+          </div>
+          <div style={{ fontSize: 12, color: theme.textMuted }}>
+            {Object.keys(groupedEvents[year]).length} month{Object.keys(groupedEvents[year]).length !== 1 ? "s" : ""} · {getYearEventCount(year)} event{getYearEventCount(year) !== 1 ? "s" : ""}
+          </div>
+        </div>
+
+        {!collapsedYears.has(year) && orderedMonths(groupedEvents[year]).map(monthGroup => (
+          <div key={monthGroup.monthKey} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => toggleCollapsed(setCollapsedMonthsState, monthGroup.monthKey)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") toggleCollapsed(setCollapsedMonthsState, monthGroup.monthKey); }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                padding: "12px 16px",
+                borderRadius: 12,
+                background: theme.surface,
+                border: `1px solid ${theme.border}`,
+                cursor: "pointer",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14, fontWeight: 700 }}>
+                <span style={{ fontSize: 13 }}>{collapsedMonths.has(monthGroup.monthKey) ? "▶" : "▼"}</span>
+                {monthGroup.monthName} {monthGroup.year}
+              </div>
+              <div style={{ fontSize: 12, color: theme.textMuted }}>
+                {Object.keys(monthGroup.weeks).length} week{Object.keys(monthGroup.weeks).length !== 1 ? "s" : ""} · {getMonthEventCount(monthGroup)} event{getMonthEventCount(monthGroup) !== 1 ? "s" : ""}
+              </div>
+            </div>
+
+            {!collapsedMonths.has(monthGroup.monthKey) && orderedWeeks(monthGroup.weeks).map(([weekLabel, weekEvents]) => {
+              const weekKey = `${monthGroup.monthKey}-${weekLabel}`;
+
+              return (
+                <div key={weekKey} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => toggleCollapsed(setCollapsedWeeksState, weekKey)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") toggleCollapsed(setCollapsedWeeksState, weekKey); }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      padding: "10px 14px",
+                      borderRadius: 10,
+                      background: theme.surface2,
+                      border: `1px solid ${theme.border}`,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, color: theme.textMuted, fontWeight: 600 }}>
+                      <span style={{ fontSize: 12 }}>{collapsedWeeks.has(weekKey) ? "▶" : "▼"}</span>
+                      {weekLabel}
+                    </div>
+                    <div style={{ fontSize: 12, color: theme.textMuted }}>{weekEvents.length} event{weekEvents.length !== 1 ? "s" : ""}</div>
+                  </div>
+
+                  {!collapsedWeeks.has(weekKey) && (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(270px,1fr))", gap: 14 }}>
+                      {weekEvents.map(renderEventCard)}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    ));
+  };
+
   const getAttendanceCount = (eventId) => {
     // Validation filter: ensure events exist before counting
     const validEventIds = new Set(events.map(e => e.id));
@@ -284,54 +493,8 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, the
         )}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(270px,1fr))", gap: 14 }}>
-        {filteredEvents.map((ev, i) => (
-          <div key={ev.id} className="card" style={{ background: theme.surface, border: `1px solid ${ev.status === "Active" ? theme.success + "50" : theme.border}`, borderRadius: 13, padding: 18, animationDelay: `${i * .07}s` }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-              <div style={{ width: 40, height: 40, borderRadius: 9, background: `${theme.accent}18`, display: "flex", alignItems: "center", justifyContent: "center", color: theme.accent }}>
-                <Icon name="events" size={20} />
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span className={`badge tag-${ev.status.toLowerCase()}`}>{ev.status}</span>
-                {canManageChurchData(currentUser.role) && (
-                  <button
-                    className="btn"
-                    type="button"
-                    onClick={() => openEdit(ev)}
-                    title="Edit event"
-                    style={{
-                      background: theme.surface2,
-                      color: theme.textMuted,
-                      padding: "6px 8px",
-                      borderRadius: 8,
-                      border: `1px solid ${theme.border}`,
-                      display: "inline-flex",
-                      alignItems: "center",
-                    }}
-                  >
-                    <Icon name="edit" size={14} />
-                  </button>
-                )}
-              </div>
-            </div>
-            <div style={{ fontWeight: 600, fontSize: 14 }}>{ev.name}</div>
-            <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 3 }}>{ev.type}</div>
-            <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 5 }}>{ev.date} • {ev.time}</div>
-            {ev.status === "Completed" && (
-              <div style={{ fontSize: 12, color: theme.success, marginTop: 6, fontWeight: 500, display: "flex", alignItems: "center", gap: 5 }}>
-                <Icon name="check" size={14} /> {getAttendanceCount(ev.id)} attendance
-              </div>
-            )}
-            {canManageChurchData(currentUser.role) && (
-              <div style={{ display: "flex", gap: 7, marginTop: 14 }}>
-                {ev.status === "Upcoming" && <button className="btn" onClick={() => handleActivate(ev.id)} style={{ flex: 1, background: `${theme.success}15`, color: theme.success, padding: "6px", borderRadius: 7, fontSize: 12, fontWeight: 500 }}>Activate</button>}
-                {ev.status === "Active" && <button className="btn" onClick={() => handleComplete(ev.id)} style={{ flex: 1, background: `${theme.accent2}15`, color: theme.accent2, padding: "6px", borderRadius: 7, fontSize: 12, fontWeight: 500 }}>Complete</button>}
-                {ev.status === "Completed" && <button className="btn" onClick={() => openAttendanceModal(ev)} style={{ flex: 1, background: `${theme.accent}15`, color: theme.accent, padding: "6px", borderRadius: 7, fontSize: 12, fontWeight: 500 }}>View Attendance</button>}
-                {ev.status !== "Active" && <button className="btn" onClick={() => handleDelete(ev.id)} style={{ background: `${theme.danger}15`, color: theme.danger, padding: "6px 10px", borderRadius: 7 }}><Icon name="trash" size={14} /></button>}
-              </div>
-            )}
-          </div>
-        ))}
+      <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+        {renderGroupedEvents()}
       </div>
 
       {/* Templates Modal */}
