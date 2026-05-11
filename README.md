@@ -237,7 +237,11 @@ git push && git push --tags
 
 3. GitHub Actions runs `.github/workflows/release.yml` and creates a **draft** release for that tag with installer/update assets.
 
-4. When you are ready, run `.github/workflows/publish-draft-release.yml` from the Actions tab and enter the tag (example: `v1.0.2`).
+4. If you build locally instead, use the new release script to publish draft GitHub update metadata:
+
+```bash
+npm run electron:release
+```
 
 5. After publishing the draft, installed app clients can fetch the update through the built-in updater.
 

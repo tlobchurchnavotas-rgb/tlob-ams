@@ -20,6 +20,7 @@ const GITHUB_PUBLISH_INFO = {
   provider: "github",
   owner: "tlobchurchnavotas-rgb",
   repo: "tlob-ams",
+  channel: "latest",
 };
 
 // Configure GitHub token for private repository access
