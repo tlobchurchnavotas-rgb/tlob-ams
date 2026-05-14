@@ -1,8 +1,11 @@
 const path = require("path");
+const https = require("https");
+const fs = require("fs");
 const express = require("express");
 const { app, BrowserWindow, Menu, shell, ipcMain } = require("electron");
 const { autoUpdater } = require("electron-updater");
 const dotenv = require('dotenv');
+const { ensureCertificates } = require("./certificate-utils");
 
 // Load environment variables from .env file in the app directory
 dotenv.config({ path: path.join(app.getAppPath(), '.env') });
@@ -50,6 +53,7 @@ function startWebServer() {
   
   const expressApp = express();
   const buildPath = resolveAssetPath("build");
+  const certDir = resolveAssetPath("electron", "certs");
   
   // Serve static files from build directory
   expressApp.use(express.static(buildPath));
@@ -60,10 +64,35 @@ function startWebServer() {
   });
   
   return new Promise((resolve) => {
-    webServer = expressApp.listen(3000, "0.0.0.0", () => {
-      console.log("Web server running on http://0.0.0.0:3000 for remote access");
-      resolve();
-    });
+    try {
+      // Ensure certificates exist
+      const certs = ensureCertificates(certDir);
+      
+      // Create HTTPS server with certificates
+      const httpsServer = https.createServer(
+        {
+          key: certs.key,
+          cert: certs.cert,
+        },
+        expressApp
+      );
+      
+      webServer = httpsServer;
+      webServer.listen(3000, "0.0.0.0", () => {
+        console.log("✓ Web server running on https://0.0.0.0:3000 for remote access");
+        console.log("  Note: HTTPS with self-signed certificate for local network access");
+        resolve();
+      });
+    } catch (error) {
+      console.error("Failed to start HTTPS server:", error.message);
+      console.log("Falling back to HTTP server...");
+      
+      // Fallback to HTTP if HTTPS setup fails
+      webServer = expressApp.listen(3000, "0.0.0.0", () => {
+        console.log("Web server running on http://0.0.0.0:3000 for remote access (HTTPS setup failed)");
+        resolve();
+      });
+    }
   });
 }
 

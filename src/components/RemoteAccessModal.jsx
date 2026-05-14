@@ -80,8 +80,9 @@ async function detectLanIps({ timeoutMs = 1500 } = {}) {
 
 export default function RemoteAccessModal({ theme, onClose, title = "Remote Access" }) {
   const loc = typeof window !== "undefined" ? window.location : { protocol: "http:", hostname: "localhost", port: "", pathname: "/" };
-  const protocol = useMemo(() => (loc.protocol === "https:" ? "https:" : "http:"), [loc.protocol]);
-  const port = loc.port || (protocol === "https:" ? "443" : "80");
+  // Remote access always uses HTTPS on port 3000 (the production web server)
+  const protocol = useMemo(() => "https:", []);
+  const port = useMemo(() => "3000", []);
 
   const [host, setHost] = useState(() => (loc.hostname || "localhost"));
   const [copied, setCopied] = useState(false);
