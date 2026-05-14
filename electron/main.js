@@ -2,7 +2,7 @@ const path = require("path");
 const https = require("https");
 const fs = require("fs");
 const express = require("express");
-const { app, BrowserWindow, Menu, shell, ipcMain } = require("electron");
+const { app, BrowserWindow, Menu, shell, ipcMain, dialog } = require("electron");
 const { autoUpdater } = require("electron-updater");
 const dotenv = require('dotenv');
 const { ensureCertificates } = require("./certificate-utils");
@@ -13,6 +13,13 @@ dotenv.config({ path: path.join(app.getAppPath(), '.env') });
 const isDev = !app.isPackaged;
 let mainWindow = null;
 let webServer = null;
+/** True when the packaged app’s Express server is listening with TLS (for iPad / remote browsers). */
+let embeddedRemoteHttpsListening = false;
+
+if (isDev) {
+  // CRA `HTTPS=true` uses a self-signed cert; allow the Electron shell to load https://localhost:3000.
+  app.commandLine.appendSwitch("ignore-certificate-errors");
+}
 
 // Configure auto-updater
 autoUpdater.checkForUpdatesAndNotify = false; // We'll handle notifications manually
@@ -53,7 +60,10 @@ function startWebServer() {
   
   const expressApp = express();
   const buildPath = resolveAssetPath("build");
-  const certDir = resolveAssetPath("electron", "certs");
+  // Packaged apps live inside app.asar (read-only); write certs under userData.
+  const certDir = app.isPackaged
+    ? path.join(app.getPath("userData"), "tlob-ams-remote-certs")
+    : resolveAssetPath("electron", "certs");
   
   // Serve static files from build directory
   expressApp.use(express.static(buildPath));
@@ -97,13 +107,15 @@ function startWebServer() {
       );
       
       webServer = httpsServer;
-      
+
       // Add error handler for HTTPS server
       httpsServer.on("error", (err) => {
+        embeddedRemoteHttpsListening = false;
         console.error("❌ HTTPS Server Error:", err.message);
       });
-      
+
       webServer.listen(3000, "0.0.0.0", () => {
+        embeddedRemoteHttpsListening = true;
         console.log("✓✓✓ HTTPS Web server running on https://0.0.0.0:3000");
         console.log("    Certificate: Self-signed (valid for local network)");
         console.log("    Ready for remote access!");
@@ -112,19 +124,17 @@ function startWebServer() {
     } catch (error) {
       console.error("❌ HTTPS initialization failed:", error.message);
       console.error("Stack:", error.stack);
-      console.log("⚠️  Falling back to HTTP (not recommended for production)");
-      
-      // Fallback to HTTP only if HTTPS completely fails
+      embeddedRemoteHttpsListening = false;
+      webServer = null;
       try {
-        webServer = expressApp.listen(3000, "0.0.0.0", () => {
-          console.log("⚠️  WARNING: HTTP server running on http://0.0.0.0:3000");
-          console.log("   HTTPS setup failed - using HTTP fallback");
-          resolve();
-        });
-      } catch (httpError) {
-        console.error("❌ Even HTTP server failed:", httpError.message);
-        resolve(); // Still resolve to prevent app crash
-      }
+        dialog.showErrorBox(
+          "TLOB AMS — Remote access (HTTPS) unavailable",
+          "The app could not start the secure web server on port 3000 (needed for iPad / phone camera scanning over Wi‑Fi).\n\n" +
+            "Common causes: another program is already using port 3000, or certificate files could not be created.\n\n" +
+            "You can still use TLOB AMS on this PC. Check the console log for details."
+        );
+      } catch {}
+      resolve();
     }
   });
 }
@@ -167,7 +177,15 @@ function createMainWindow() {
   win.webContents.on("will-navigate", (e, url) => {
     const current = win.webContents.getURL();
     if (!current || url === current) return;
-    if (url.startsWith("file://") || url.startsWith("http://localhost")) return;
+    if (
+      url.startsWith("file://") ||
+      url.startsWith("http://localhost") ||
+      url.startsWith("https://localhost") ||
+      url.startsWith("http://127.0.0.1") ||
+      url.startsWith("https://127.0.0.1")
+    ) {
+      return;
+    }
     e.preventDefault();
     shell.openExternal(url);
   });
@@ -241,6 +259,11 @@ ipcMain.handle("download-update", async () => {
 ipcMain.on("install-update", () => {
   autoUpdater.quitAndInstall();
 });
+
+ipcMain.handle("tlob-app-info", () => ({
+  isPackaged: app.isPackaged,
+  embeddedRemoteHttpsListening,
+}));
 
 app.whenReady().then(async () => {
   await startWebServer();

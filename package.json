@@ -23,7 +23,7 @@
     "start:lan:https": "cross-env HOST=0.0.0.0 HTTPS=true react-scripts start",
     "build": "cross-env PUBLIC_URL=. react-scripts build",
     "assets:electron": "node tools/generate-electron-assets.js",
-    "electron:dev": "concurrently -k -n REACT,ELECTRON -c cyan,magenta \"npm start\" \"wait-on http://localhost:3000 && cross-env ELECTRON_START_URL=http://localhost:3000 electron .\"",
+    "electron:dev": "concurrently -k -n REACT,ELECTRON -c cyan,magenta \"npm run start:lan:https\" \"wait-on tcp:3000 && cross-env ELECTRON_START_URL=https://localhost:3000 electron .\"",
     "electron:pack": "npm run assets:electron && npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir",
     "electron:dist": "npm run assets:electron && npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder",
     "electron:release": "npm run assets:electron && npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false EP_DRAFT=true electron-builder --publish always",

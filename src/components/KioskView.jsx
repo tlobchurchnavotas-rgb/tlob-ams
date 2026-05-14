@@ -86,7 +86,9 @@ function KioskView({ members, events, attendance, setAttendance, theme, onExit, 
       const isSecure = window.isSecureContext || window.location.hostname === "localhost";
       if (!isSecure) {
         setCamState("error");
-        const msg = "Camera requires HTTPS on iPad/iPhone Safari. Start with HTTPS and open https://<your-ip>:3000";
+        const host = window.location.hostname || "your-ip";
+        const port = window.location.port || "3000";
+        const msg = `Camera needs HTTPS (not plain HTTP) when you open the app by Wi‑Fi IP. Install and open the TLOB AMS desktop app on this PC and use Remote access from there — it starts HTTPS for tablets automatically — then open https://${host}:${port} on this device. Developers can use: npm run start:lan:https`;
         setCamError(msg);
         showNotif?.(msg, "error");
         return;

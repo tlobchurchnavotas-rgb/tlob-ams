@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("tlob", {
   platform: process.platform,
+  getAppInfo: () => ipcRenderer.invoke("tlob-app-info"),
   checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),
   downloadUpdate: () => ipcRenderer.invoke("download-update"),
   onUpdateAvailable: (callback) => ipcRenderer.on("update-available", (event, info) => callback(info)),

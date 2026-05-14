@@ -1,5 +1,20 @@
 const fs = require("fs");
 const path = require("path");
+const os = require("os");
+
+function getLanIPv4Addresses() {
+  const nets = os.networkInterfaces();
+  const out = [];
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name] || []) {
+      if (!net) continue;
+      const fam = net.family;
+      const v4 = fam === "IPv4" || fam === 4;
+      if (v4 && !net.internal) out.push(net.address);
+    }
+  }
+  return [...new Set(out)].filter(Boolean);
+}
 
 /**
  * Ensure certificates exist, generate if needed using selfsigned
@@ -52,11 +67,24 @@ function ensureCertificates(certDir) {
       { name: "countryName", value: "US" },
     ];
 
+    const altNames = [
+      { type: 2, value: "localhost" },
+      { type: 7, ip: "127.0.0.1" },
+      ...getLanIPv4Addresses().map((ip) => ({ type: 7, ip })),
+    ];
+
+    const extensions = [
+      { name: "basicConstraints", cA: false },
+      { name: "keyUsage", digitalSignature: true, keyEncipherment: true },
+      { name: "subjectAltName", altNames },
+    ];
+
     console.log("  Generating RSA key pair (2048-bit)...");
     const pems = selfsigned.generate(attrs, {
       days: 365,
       keySize: 2048,
       algorithm: "sha256",
+      extensions,
     });
 
     // Validate generated certificates
@@ -97,4 +125,5 @@ function ensureCertificates(certDir) {
 
 module.exports = {
   ensureCertificates,
+  getLanIPv4Addresses,
 };

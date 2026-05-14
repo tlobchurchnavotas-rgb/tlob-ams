@@ -12,26 +12,24 @@ const C = {
   cardBg: "#f0f4ff",
 };
 
-const LOGIN_BG = `${process.env.PUBLIC_URL || ""}/login-bg.png`;
+const LOGIN_BG = `${process.env.PUBLIC_URL || ""}/login-welcome-bg.png`;
 
-function LoginBackgroundImage({ objectPosition = "center center", zoom = 1 }) {
+/** Source art: 1920×1080 (16:9). Scales uniformly to fill the viewport (cover); on exact FHD it maps edge-to-edge without stretching. */
+function LoginBackgroundLayer() {
+  const src = LOGIN_BG.replace(/'/g, "\\'");
   return (
-    <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
-      <img
-        src={LOGIN_BG}
-        alt=""
-        style={{
-          width: "100%",
-          height: "100%",
-          objectFit: "cover",
-          objectPosition,
-          transform: zoom !== 1 ? `scale(${zoom})` : undefined,
-          transformOrigin: "center center",
-        }}
-        decoding="async"
-        fetchpriority="high"
-      />
-    </div>
+    <div
+      aria-hidden
+      style={{
+        position: "absolute",
+        inset: 0,
+        backgroundColor: "#cfe8f5",
+        backgroundImage: `url('${src}')`,
+        backgroundRepeat: "no-repeat",
+        backgroundSize: "cover",
+        backgroundPosition: "left center",
+      }}
+    />
   );
 }
 
@@ -88,14 +86,14 @@ function LoginPage({ onSignIn, darkMode: _darkMode, supabaseConfigured, onBack }
 
   return (
     <div
+      className="login-fill-min"
       style={{
         position: "fixed",
         inset: 0,
         width: "100vw",
-        minHeight: "100vh",
         display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
+        alignItems: "stretch",
+        justifyContent: "flex-start",
         fontFamily: "'DM Sans','Segoe UI',sans-serif",
         overflow: "hidden",
         padding: 0,
@@ -111,11 +109,14 @@ function LoginPage({ onSignIn, darkMode: _darkMode, supabaseConfigured, onBack }
         .login-link { cursor: pointer; background: none; border: none; font: inherit; color: ${C.accent}; text-decoration: underline; text-underline-offset: 2px; padding: 0; }
         .login-link:hover { opacity: 0.85; }
         input::placeholder { color: rgba(26, 35, 64, 0.42); }
+        @media (max-width: 720px) {
+          .login-split { grid-template-columns: 1fr !important; }
+        }
+        .login-fill-min { min-height: 100vh; min-height: 100dvh; }
       `}</style>
 
       <div style={{ position: "absolute", inset: 0, zIndex: 0 }}>
-        <LoginBackgroundImage objectPosition="50% 45%" />
-        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(12,18,32,0.25) 0%, rgba(15,23,42,0.35) 100%)" }} aria-hidden />
+        <LoginBackgroundLayer />
       </div>
 
       {onBack && (
@@ -155,27 +156,45 @@ function LoginPage({ onSignIn, darkMode: _darkMode, supabaseConfigured, onBack }
       )}
 
       <div
+        className="login-split login-fill-min"
         style={{
           position: "relative",
           zIndex: 1,
+          flex: 1,
+          alignSelf: "stretch",
           width: "100%",
-          maxWidth: 380,
-          borderRadius: 16,
-          overflow: "hidden",
-          boxShadow: "0 24px 48px rgba(15, 23, 42, 0.28)",
-          animation: "fadeUp .45s ease",
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 0.70fr) minmax(0, 0.50fr)",
+          boxSizing: "border-box",
         }}
       >
-
-        
         <style>{`@keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }`}</style>
 
-        <div style={{ height: 52, position: "relative", overflow: "hidden" }}>
-          <LoginBackgroundImage objectPosition="50% 50%" zoom={1.85} />
-          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, transparent 0%, rgba(240,244,255,0.2) 100%)" }} aria-hidden />
-        </div>
-
-        <div style={{ background: C.cardBg, padding: "20px 26px 22px" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            paddingBlock: "clamp(20px, 4vh, 48px)",
+            paddingInline: "clamp(16px, 3.25vw, 40px)",
+            minWidth: 0,
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 500,
+              borderRadius: 16,
+              overflow: "hidden",
+              boxShadow: "0 20px 50px rgba(15, 23, 42, 0.22)",
+              animation: "fadeUp .45s ease",
+              background: "rgba(255, 255, 255, 0.96)",
+              backdropFilter: "blur(10px)",
+              WebkitBackdropFilter: "blur(10px)",
+              border: "3px solid rgba(0, 110, 255, 0.9)",
+            }}
+          >
+        <div style={{ background: "transparent", padding: "22px 26px 24px" }}>
           <div style={{ display: "flex", justifyContent: "center", marginTop: 0, marginBottom: 16 }}>
             <img
               src={CHURCH_LOGO_SRC}
@@ -393,6 +412,9 @@ function LoginPage({ onSignIn, darkMode: _darkMode, supabaseConfigured, onBack }
             )}
           </div>
         </div>
+          </div>
+        </div>
+        <div aria-hidden style={{ minWidth: 0 }} />
       </div>
     </div>
   );

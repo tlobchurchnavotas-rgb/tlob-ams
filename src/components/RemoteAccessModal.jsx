@@ -80,9 +80,34 @@ async function detectLanIps({ timeoutMs = 1500 } = {}) {
 
 export default function RemoteAccessModal({ theme, onClose, title = "Remote Access" }) {
   const loc = typeof window !== "undefined" ? window.location : { protocol: "http:", hostname: "localhost", port: "", pathname: "/" };
-  // Remote access always uses HTTPS on port 3000 (the production web server)
-  const protocol = useMemo(() => "https:", []);
-  const port = useMemo(() => "3000", []);
+
+  const [appInfo, setAppInfo] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        if (typeof window !== "undefined" && window.tlob?.getAppInfo) {
+          const info = await window.tlob.getAppInfo();
+          if (!cancelled) setAppInfo(info);
+        }
+      } catch {
+        if (!cancelled) setAppInfo(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const port = useMemo(() => String(loc.port || "3000").trim() || "3000", [loc.port]);
+
+  const protocol = useMemo(() => {
+    if (appInfo?.embeddedRemoteHttpsListening) return "https:";
+    if (loc.protocol === "file:") return "https:";
+    if (loc.protocol === "https:") return "https:";
+    return "http:";
+  }, [appInfo?.embeddedRemoteHttpsListening, loc.protocol]);
 
   const [host, setHost] = useState(() => (loc.hostname || "localhost"));
   const [copied, setCopied] = useState(false);
@@ -245,12 +270,44 @@ export default function RemoteAccessModal({ theme, onClose, title = "Remote Acce
               </div>
             </div>
 
+            {appInfo && appInfo.isPackaged && !appInfo.embeddedRemoteHttpsListening && (
+              <div style={{ padding: "10px 12px", background: `${theme.danger}12`, border: `1px solid ${theme.danger}35`, borderRadius: 12, fontSize: 12, color: theme.textMuted, lineHeight: 1.5 }}>
+                <b style={{ color: theme.danger }}>Remote HTTPS did not start.</b> Another program may be using port 3000, or certificates could not be created. Tablets cannot use the camera scanner until this is fixed.
+              </div>
+            )}
+
+            {loc.protocol === "http:" && !appInfo?.embeddedRemoteHttpsListening && (
+              <div style={{ padding: "10px 12px", background: `${theme.danger}12`, border: `1px solid ${theme.danger}35`, borderRadius: 12, fontSize: 12, color: theme.textMuted, lineHeight: 1.5 }}>
+                <b style={{ color: theme.danger }}>This page is not HTTPS.</b> The URL below matches what your PC is serving. For the <b>tablet camera scanner</b>, install and open the <b>TLOB AMS</b> desktop app on this PC and use Remote access from there (HTTPS starts automatically for tablets), or run <code style={{ fontFamily: "DM Mono, monospace" }}>npm run start:lan:https</code> for browser-only development.
+              </div>
+            )}
+
+            {loc.protocol !== "http:" && (
             <div style={{ padding: "10px 12px", background: `${theme.accent}0d`, border: `1px solid ${theme.accent}25`, borderRadius: 12 }}>
-              <div style={{ fontSize: 12, fontWeight: 800, color: theme.accent, marginBottom: 4 }}>iPad camera scanning</div>
+              <div style={{ fontSize: 12, fontWeight: 800, color: theme.accent, marginBottom: 4 }}>Tablet camera scanning</div>
               <div style={{ fontSize: 12, color: theme.textMuted, lineHeight: 1.5 }}>
-                If you need the in-browser camera scanner on iPad, start the app with <code style={{ fontFamily: "DM Mono, monospace" }}>npm run start:lan:https</code>.
+                {appInfo?.embeddedRemoteHttpsListening ? (
+                  <>
+                    The <b>TLOB AMS</b> desktop app on this PC is already serving a secure link for your tablet. Open the Device URL on the iPad and tap through Safari&apos;s certificate warning once if it appears.
+                  </>
+                ) : loc.protocol === "https:" ? (
+                  <>
+                    This session is already on HTTPS — tablets can use the camera scanner with the Device URL below (accept the certificate warning on the tablet if asked).
+                  </>
+                ) : loc.protocol === "file:" ? (
+                  appInfo && appInfo.isPackaged && !appInfo.embeddedRemoteHttpsListening ? (
+                    <>Fix the HTTPS issue above, then use the Device URL on your tablet.</>
+                  ) : (
+                    <>Use the Device URL (HTTPS) on your tablet. On first connect, accept Safari&apos;s certificate warning if it appears.</>
+                  )
+                ) : (
+                  <>
+                    For the in-browser camera on a tablet you need HTTPS. Prefer opening <b>TLOB AMS</b> on this PC and copying the link from here, or for developers use <code style={{ fontFamily: "DM Mono, monospace" }}>npm run start:lan:https</code>.
+                  </>
+                )}
               </div>
             </div>
+            )}
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>

@@ -21,17 +21,8 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, the
   const [attendanceSearchQuery, setAttendanceSearchQuery] = useState("");
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [templateToDelete, setTemplateToDelete] = useState(null);
-  const [collapsedYearsState, setCollapsedYearsState] = usePersisted("events_collapsed_years", [], currentUser?.id ?? null);
-  const [collapsedMonthsState, setCollapsedMonthsState] = usePersisted("events_collapsed_months", [], currentUser?.id ?? null);
-  const [collapsedWeeksState, setCollapsedWeeksState] = usePersisted("events_collapsed_weeks", [], currentUser?.id ?? null);
-  const collapsedYears = new Set(collapsedYearsState);
-  const collapsedMonths = new Set(collapsedMonthsState);
-  const collapsedWeeks = new Set(collapsedWeeksState);
-
-  const toggleCollapsed = (setter, key) => setter(prev => {
-    if (prev.includes(key)) return prev.filter(k => k !== key);
-    return [...prev, key];
-  });
+  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth());
 
   const applyTemplate = t => { setForm(f => ({ ...f, name: t.name, type: t.type, time: t.time })); setShowTemplates(false); setShowModal(true); };
 
@@ -228,6 +219,15 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, the
     return acc;
   }, {});
 
+  const eventYearSet = new Set();
+  sortedEvents.forEach((ev) => {
+    const d = new Date(ev.date);
+    if (!Number.isNaN(d.getTime())) eventYearSet.add(d.getFullYear());
+  });
+  const eventYears = [...eventYearSet].sort((a, b) => b - a);
+
+  const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
   const renderEventCard = (ev, idx) => (
     <div key={ev.id} className="card" style={{ background: theme.surface, border: `1px solid ${ev.status === "Active" ? theme.success + "50" : theme.border}`, borderRadius: 13, padding: 18, animationDelay: `${idx * .07}s` }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
@@ -276,21 +276,20 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, the
     </div>
   );
 
-  const orderedYears = Object.keys(groupedEvents).sort((a, b) => Number(b) - Number(a));
-  const orderedMonths = (months) => Object.values(months).sort((a, b) => a.monthNumber - b.monthNumber);
-  const orderedWeeks = (weeks) => Object.entries(weeks).sort((a, b) => {
-    const weekA = Number(a[0].replace(/[^0-9]/g, ""));
-    const weekB = Number(b[0].replace(/[^0-9]/g, ""));
-    return weekB - weekA;
+  const orderedWeeksAsc = (weeks) => Object.entries(weeks).sort((a, b) => {
+    const weekA = Number(a[0].replace(/[^0-9]/g, "")) || 0;
+    const weekB = Number(b[0].replace(/[^0-9]/g, "")) || 0;
+    return weekA - weekB;
   });
 
-  const getYearEventCount = (year) => orderedMonths(groupedEvents[year]).reduce((sum, monthGroup) => {
-    return sum + Object.values(monthGroup.weeks).reduce((weekSum, weekEvents) => weekSum + weekEvents.length, 0);
-  }, 0);
+  const countEventsInMonth = (year, monthIndex) => {
+    const key = `${year}-${monthIndex}`;
+    const monthGroup = groupedEvents[year]?.[key];
+    if (!monthGroup) return 0;
+    return Object.values(monthGroup.weeks).reduce((sum, weekEvents) => sum + weekEvents.length, 0);
+  };
 
-  const getMonthEventCount = (monthGroup) => Object.values(monthGroup.weeks).reduce((sum, weekEvents) => sum + weekEvents.length, 0);
-
-  const renderGroupedEvents = () => {
+  const renderCalendarBody = () => {
     if (sortedEvents.length === 0) {
       return (
         <div style={{ padding: 22, borderRadius: 16, background: theme.surface2, border: `1px solid ${theme.border}`, color: theme.textMuted, textAlign: "center" }}>
@@ -299,103 +298,182 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, the
       );
     }
 
-    return orderedYears.map(year => (
-      <div key={year} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+    const monthKey = `${selectedYear}-${selectedMonth}`;
+    const monthGroup = groupedEvents[selectedYear]?.[monthKey];
+    const monthLong = new Date(selectedYear, selectedMonth, 1).toLocaleString(undefined, { month: "long" });
+
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 14, width: "100%", minWidth: 0, alignSelf: "stretch" }}>
         <div
-          role="button"
-          tabIndex={0}
-          onClick={() => toggleCollapsed(setCollapsedYearsState, year)}
-          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") toggleCollapsed(setCollapsedYearsState, year); }}
           style={{
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            gap: 12,
-            padding: "14px 18px",
-            borderRadius: 14,
+            gap: 10,
+            flexWrap: "wrap",
+            padding: "6px 12px",
+            borderRadius: 10,
             background: theme.surface2,
             border: `1px solid ${theme.border}`,
-            cursor: "pointer",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 15, fontWeight: 700 }}>
-            <span style={{ fontSize: 13 }}>{collapsedYears.has(year) ? "▶" : "▼"}</span>
-            {year}
-          </div>
-          <div style={{ fontSize: 12, color: theme.textMuted }}>
-            {Object.keys(groupedEvents[year]).length} month{Object.keys(groupedEvents[year]).length !== 1 ? "s" : ""} · {getYearEventCount(year)} event{getYearEventCount(year) !== 1 ? "s" : ""}
-          </div>
-        </div>
-
-        {!collapsedYears.has(year) && orderedMonths(groupedEvents[year]).map(monthGroup => (
-          <div key={monthGroup.monthKey} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => toggleCollapsed(setCollapsedMonthsState, monthGroup.monthKey)}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") toggleCollapsed(setCollapsedMonthsState, monthGroup.monthKey); }}
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <button
+              type="button"
+              className="btn"
+              aria-label="Previous year"
+              disabled={selectedYear <= 1970}
+              onClick={() => setSelectedYear((y) => y - 1)}
               style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 12,
-                padding: "12px 16px",
-                borderRadius: 12,
-                background: theme.surface,
+                padding: "4px 8px",
+                borderRadius: 8,
                 border: `1px solid ${theme.border}`,
-                cursor: "pointer",
+                background: theme.surface,
+                color: theme.text,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                opacity: selectedYear <= 1970 ? 0.4 : 1,
+                cursor: selectedYear <= 1970 ? "not-allowed" : "pointer",
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14, fontWeight: 700 }}>
-                <span style={{ fontSize: 13 }}>{collapsedMonths.has(monthGroup.monthKey) ? "▶" : "▼"}</span>
-                {monthGroup.monthName} {monthGroup.year}
-              </div>
-              <div style={{ fontSize: 12, color: theme.textMuted }}>
-                {Object.keys(monthGroup.weeks).length} week{Object.keys(monthGroup.weeks).length !== 1 ? "s" : ""} · {getMonthEventCount(monthGroup)} event{getMonthEventCount(monthGroup) !== 1 ? "s" : ""}
-              </div>
+              <Icon name="back" size={17} />
+            </button>
+            <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: "0.02em", minWidth: 92, textAlign: "center", lineHeight: 1.2 }}>
+              Year {selectedYear}
             </div>
-
-            {!collapsedMonths.has(monthGroup.monthKey) && orderedWeeks(monthGroup.weeks).map(([weekLabel, weekEvents]) => {
-              const weekKey = `${monthGroup.monthKey}-${weekLabel}`;
-
-              return (
-                <div key={weekKey} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => toggleCollapsed(setCollapsedWeeksState, weekKey)}
-                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") toggleCollapsed(setCollapsedWeeksState, weekKey); }}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: 12,
-                      padding: "10px 14px",
-                      borderRadius: 10,
-                      background: theme.surface2,
-                      border: `1px solid ${theme.border}`,
-                      cursor: "pointer",
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, color: theme.textMuted, fontWeight: 600 }}>
-                      <span style={{ fontSize: 12 }}>{collapsedWeeks.has(weekKey) ? "▶" : "▼"}</span>
-                      {weekLabel}
-                    </div>
-                    <div style={{ fontSize: 12, color: theme.textMuted }}>{weekEvents.length} event{weekEvents.length !== 1 ? "s" : ""}</div>
-                  </div>
-
-                  {!collapsedWeeks.has(weekKey) && (
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(270px,1fr))", gap: 14 }}>
-                      {weekEvents.map(renderEventCard)}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            <button
+              type="button"
+              className="btn"
+              aria-label="Next year"
+              disabled={selectedYear >= 2100}
+              onClick={() => setSelectedYear((y) => y + 1)}
+              style={{
+                padding: "4px 8px",
+                borderRadius: 8,
+                border: `1px solid ${theme.border}`,
+                background: theme.surface,
+                color: theme.text,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                opacity: selectedYear >= 2100 ? 0.4 : 1,
+                cursor: selectedYear >= 2100 ? "not-allowed" : "pointer",
+              }}
+            >
+              <span style={{ display: "inline-flex", transform: "scaleX(-1)" }}>
+                <Icon name="back" size={17} />
+              </span>
+            </button>
           </div>
-        ))}
+          {eventYears.length > 1 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
+              {eventYears.map((y) => (
+                <button
+                  key={y}
+                  type="button"
+                  className="btn"
+                  onClick={() => setSelectedYear(y)}
+                  style={{
+                    padding: "4px 10px",
+                    borderRadius: 7,
+                    fontSize: 11,
+                    fontWeight: 600,
+                    border: `1px solid ${y === selectedYear ? theme.accent : theme.border}`,
+                    background: y === selectedYear ? `${theme.accent}22` : theme.surface,
+                    color: y === selectedYear ? theme.accent : theme.textMuted,
+                  }}
+                >
+                  {y}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div
+          role="tablist"
+          aria-label="Select month"
+          style={{
+            display: "flex",
+            width: "100%",
+            flexWrap: "nowrap",
+            gap: 5,
+            padding: "2px 0",
+            boxSizing: "border-box",
+          }}
+        >
+          {MONTH_SHORT.map((label, monthIndex) => {
+            const count = countEventsInMonth(selectedYear, monthIndex);
+            const isActive = selectedMonth === monthIndex;
+            return (
+              <button
+                key={label}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => setSelectedMonth(monthIndex)}
+                className="btn"
+                style={{
+                  flex: "1 1 0",
+                  minWidth: 0,
+                  padding: "5px 4px",
+                  borderRadius: 8,
+                  fontSize: "clamp(13px, 1.45vw, 16px)",
+                  fontWeight: 600,
+                  border: `1px solid ${isActive ? theme.accent : theme.border}`,
+                  background: isActive ? theme.accent : theme.surface,
+                  color: isActive ? "#fff" : theme.text,
+                  boxShadow: isActive ? `0 2px 8px ${theme.accent}40` : "none",
+                  display: "flex",
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 3,
+                  flexWrap: "nowrap",
+                  lineHeight: 1.15,
+                  textAlign: "center",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                <span>{label}</span>
+                {count > 0 && (
+                  <span style={{ opacity: isActive ? 0.95 : 0.65, fontWeight: 500, fontSize: "0.82em" }}>({count})</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {!monthGroup || Object.keys(monthGroup.weeks).length === 0 ? (
+          <div style={{ padding: 22, borderRadius: 16, background: theme.surface2, border: `1px solid ${theme.border}`, color: theme.textMuted, textAlign: "center" }}>
+            No events in {monthLong} {selectedYear}.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+            {orderedWeeksAsc(monthGroup.weeks).map(([weekLabel, weekEvents]) => (
+              <div key={weekLabel} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    letterSpacing: "0.08em",
+                    color: theme.textMuted,
+                    textTransform: "uppercase",
+                    paddingLeft: 2,
+                  }}
+                >
+                  {weekLabel}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(270px,1fr))", gap: 14 }}>
+                  {weekEvents.map((ev, idx) => renderEventCard(ev, idx))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-    ));
+    );
   };
 
   const getAttendanceCount = (eventId) => {
@@ -493,8 +571,8 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, the
         )}
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-        {renderGroupedEvents()}
+      <div style={{ display: "flex", flexDirection: "column", gap: 24, width: "100%", minWidth: 0 }}>
+        {renderCalendarBody()}
       </div>
 
       {/* Templates Modal */}

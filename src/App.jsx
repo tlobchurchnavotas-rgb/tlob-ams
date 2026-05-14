@@ -9,7 +9,6 @@ import {
   CHURCH_LOGO_SRC,
 } from "./constants.js";
 import { Icon } from "./components/Icon.jsx";
-import HomePage from "./components/HomePage.jsx";
 import LoginPage from "./components/LoginPage.jsx";
 import KioskView from "./components/KioskView.jsx";
 import DashboardView from "./components/DashboardView.jsx";
@@ -38,7 +37,6 @@ import { migrateKvToRealTablesIfNeeded } from "./migrate.js";
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function TLOBApp() {
   const [currentUser, setCurrentUser] = useState(null);
-  const [showLoginPage, setShowLoginPage] = useState(false);
   const [activeView, setActiveView] = useState("dashboard");
   const [profileMember, setProfileMember] = useState(null);
   const [authReady, setAuthReady] = useState(false);
@@ -285,10 +283,7 @@ export default function TLOBApp() {
   }
 
   if (!currentUser) {
-    if (!showLoginPage) {
-      return <HomePage onGetStarted={() => setShowLoginPage(true)} darkMode={false} />;
-    }
-    return <LoginPage onSignIn={onSignIn} darkMode={darkMode} supabaseConfigured={isSupabaseConfigured} onBack={() => setShowLoginPage(false)} />;
+    return <LoginPage onSignIn={onSignIn} darkMode={darkMode} supabaseConfigured={isSupabaseConfigured} />;
   }
   if (kioskMode) return (
     <KioskView
