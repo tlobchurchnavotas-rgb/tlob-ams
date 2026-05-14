@@ -65,8 +65,27 @@ function startWebServer() {
   
   return new Promise((resolve) => {
     try {
+      console.log("🔐 Starting HTTPS server...");
+      
       // Ensure certificates exist
-      const certs = ensureCertificates(certDir);
+      let certs;
+      try {
+        certs = ensureCertificates(certDir);
+        console.log("✓ Certificates loaded successfully");
+      } catch (certError) {
+        console.error("❌ Certificate error:", certError.message);
+        throw certError;
+      }
+      
+      // Verify certificate and key are valid
+      if (!certs.cert || typeof certs.cert !== "string") {
+        throw new Error("Invalid certificate format");
+      }
+      if (!certs.key || typeof certs.key !== "string") {
+        throw new Error("Invalid key format");
+      }
+      
+      console.log("✓ Certificate validation passed");
       
       // Create HTTPS server with certificates
       const httpsServer = https.createServer(
@@ -78,20 +97,34 @@ function startWebServer() {
       );
       
       webServer = httpsServer;
+      
+      // Add error handler for HTTPS server
+      httpsServer.on("error", (err) => {
+        console.error("❌ HTTPS Server Error:", err.message);
+      });
+      
       webServer.listen(3000, "0.0.0.0", () => {
-        console.log("✓ Web server running on https://0.0.0.0:3000 for remote access");
-        console.log("  Note: HTTPS with self-signed certificate for local network access");
+        console.log("✓✓✓ HTTPS Web server running on https://0.0.0.0:3000");
+        console.log("    Certificate: Self-signed (valid for local network)");
+        console.log("    Ready for remote access!");
         resolve();
       });
     } catch (error) {
-      console.error("Failed to start HTTPS server:", error.message);
-      console.log("Falling back to HTTP server...");
+      console.error("❌ HTTPS initialization failed:", error.message);
+      console.error("Stack:", error.stack);
+      console.log("⚠️  Falling back to HTTP (not recommended for production)");
       
-      // Fallback to HTTP if HTTPS setup fails
-      webServer = expressApp.listen(3000, "0.0.0.0", () => {
-        console.log("Web server running on http://0.0.0.0:3000 for remote access (HTTPS setup failed)");
-        resolve();
-      });
+      // Fallback to HTTP only if HTTPS completely fails
+      try {
+        webServer = expressApp.listen(3000, "0.0.0.0", () => {
+          console.log("⚠️  WARNING: HTTP server running on http://0.0.0.0:3000");
+          console.log("   HTTPS setup failed - using HTTP fallback");
+          resolve();
+        });
+      } catch (httpError) {
+        console.error("❌ Even HTTP server failed:", httpError.message);
+        resolve(); // Still resolve to prevent app crash
+      }
     }
   });
 }
