@@ -1,9 +1,8 @@
 const fs = require("fs");
 const path = require("path");
-const { execSync } = require("child_process");
 
 /**
- * Ensure certificates exist, generate if needed using OpenSSL
+ * Ensure certificates exist, generate if needed using selfsigned
  * @param {string} certDir - Directory to store certificates
  * @returns {{cert: string, key: string}} - Certificate and key content as strings
  */
@@ -28,72 +27,37 @@ function ensureCertificates(certDir) {
   console.log("🔐 Generating self-signed certificate for HTTPS...");
 
   try {
-    // Try to use openssl command (works on Windows if OpenSSL is installed via WSL, Git Bash, or native OpenSSL)
-    // For Windows, also check if we can use Powershell or WSL
-    const osIsWindows = process.platform === "win32";
+    // Use selfsigned package for reliable cert generation
+    const selfsigned = require("selfsigned");
     
-    if (osIsWindows) {
-      // Try multiple approaches for Windows
-      let success = false;
-      
-      // Approach 1: Try native openssl (if installed)
-      try {
-        execSync(
-          `openssl req -x509 -newkey rsa:2048 -keyout "${keyPath}" -out "${certPath}" -days 365 -nodes -subj "/CN=localhost/O=TLOB AMS/C=US"`,
-          { stdio: "pipe" }
-        );
-        success = true;
-        console.log("✓ Generated certificate with OpenSSL");
-      } catch (e1) {
-        // Approach 2: Try PowerShell (Windows-native)
-        try {
-          const psScript = `
-$cert = New-SelfSignedCertificate -DnsName localhost -CertStoreLocation cert:\\CurrentUser\\My -Subject "CN=localhost,O=TLOB AMS,C=US" -Type SSLAuthenticationCertificate -NotAfter (Get-Date).AddYears(1);
-$certPath = "${certPath}".Replace("\\", "\\\\");
-$keyPath = "${keyPath}".Replace("\\", "\\\\");
-Export-Certificate -Cert $cert -FilePath $certPath -Force | Out-Null;
-$key = $cert.PrivateKey;
-$keyBytes = $key.ExportPkcs8PrivateKey();
-[System.IO.File]::WriteAllBytes($keyPath, $keyBytes);
-Write-Host "Certificate generated successfully"
-          `.trim();
-          
-          execSync(`powershell -NoProfile -Command "${psScript}"`, {
-            stdio: "pipe",
-          });
-          success = true;
-          console.log("✓ Generated certificate with PowerShell");
-        } catch (e2) {
-          throw new Error(
-            "Could not generate certificate. Please ensure OpenSSL is installed or run PowerShell as Administrator."
-          );
-        }
-      }
-      
-      if (!success) {
-        throw new Error("Failed to generate certificate on Windows");
-      }
-    } else {
-      // macOS/Linux: Use openssl
-      execSync(
-        `openssl req -x509 -newkey rsa:2048 -keyout "${keyPath}" -out "${certPath}" -days 365 -nodes -subj "/CN=localhost/O=TLOB AMS/C=US"`,
-        { stdio: "pipe" }
-      );
-      console.log("✓ Generated certificate with OpenSSL");
-    }
+    const attrs = [
+      { name: "commonName", value: "localhost" },
+      { name: "organizationName", value: "TLOB AMS" },
+      { name: "countryName", value: "US" },
+    ];
+
+    const pems = selfsigned.generate(attrs, {
+      days: 365,
+      keySize: 2048,
+      algorithm: "sha256",
+    });
+
+    // Write certificate and key to files
+    fs.writeFileSync(certPath, pems.cert, "utf8");
+    fs.writeFileSync(keyPath, pems.private, "utf8");
+
+    console.log("✓ Generated self-signed certificate successfully");
+
+    return {
+      cert: pems.cert,
+      key: pems.private,
+    };
   } catch (error) {
     console.error("❌ Certificate generation failed:", error.message);
     throw new Error(
-      `Failed to generate HTTPS certificate: ${error.message}\n` +
-      "Please install OpenSSL or ensure PowerShell can create self-signed certificates."
+      `Failed to generate HTTPS certificate: ${error.message}`
     );
   }
-
-  // Read and return the generated certificates
-  return {
-    cert: fs.readFileSync(certPath, "utf8"),
-    key: fs.readFileSync(keyPath, "utf8"),
-  };
 }
 
 module.exports = {
