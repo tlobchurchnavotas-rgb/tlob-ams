@@ -760,8 +760,8 @@ function BulkPrintModal({ members, theme, showNotif, onClose }) {
   const filtered = activeMembers.filter(m => {
     if (filterMinistry !== "All" && !splitMinistries(m.ministry).includes(filterMinistry)) return false;
     if (filterStatus !== "All" && m.status !== filterStatus) return false;
-    if (filterJoinedFrom && m.joined && m.joined < filterJoinedFrom) return false;
-    if (filterJoinedTo && m.joined && m.joined > filterJoinedTo) return false;
+    // Use isJoinedWithinFilter to handle partial dates (year only, year-month, year-month-day)
+    if ((filterJoinedFrom || filterJoinedTo) && !isJoinedWithinFilter(m.joined, filterJoinedFrom, filterJoinedTo)) return false;
     if (searchFilter && !m.name.toLowerCase().includes(searchFilter.toLowerCase()) && !m.id.toLowerCase().includes(searchFilter.toLowerCase())) return false;
     return true;
   });
@@ -805,6 +805,9 @@ function BulkPrintModal({ members, theme, showNotif, onClose }) {
       };
     }));
 
+    // Calculate grid columns: 1 if 1-2 cards, 3 if 3+ cards
+    const gridColumns = Math.min(cards.length, 3);
+
     const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -831,42 +834,45 @@ function BulkPrintModal({ members, theme, showNotif, onClose }) {
     
     .container {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(${gridColumns}, 1fr);
       gap: 10px;
       padding: 0;
       margin: 0;
+      justify-items: center;
     }
     
     .card {
       width: 100%;
-      aspect-ratio: 2.5 / 3.2;
+      max-width: 250px;
+      height: 310px;
       border: 5px solid #000000;
       border-radius: 8px;
-      padding: 10px;
+      padding: 8px;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: flex-start;
+      justify-content: space-between;
       background: white;
       page-break-inside: avoid;
-      gap: 8px;
+      gap: 0px;
     }
     
     .card-header {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 6px;
       width: 100%;
       background: #1e293b;
       color: white;
-      padding: 6px 8px;
+      padding: 3px 6px;
       border-radius: 5px;
       border: 1px solid #0f172a;
+      flex-shrink: 0;
     }
     
     .card-logo {
-      width: 24px;
-      height: 24px;
+      width: 18px;
+      height: 18px;
       border-radius: 50%;
       border: 1px solid rgba(255,255,255,0.3);
       object-fit: cover;
@@ -874,53 +880,57 @@ function BulkPrintModal({ members, theme, showNotif, onClose }) {
     }
     
     .card-title {
-      font-size: 12px;
+      font-size: 10px;
       font-weight: 700;
-      line-height: 1.2;
+      line-height: 1.1;
       flex: 1;
     }
     
     .qr-box {
-      padding: 6px;
+      padding: 4px;
       border: 1.5px solid #144dbe;
       border-radius: 6px;
       background: #f9fafb;
       display: flex;
       align-items: center;
       justify-content: center;
+      flex: 1;
+      margin-top: 6px;
+      margin-bottom: 6px;
     }
     
     .qr-box img {
-      width: 210px;
-      height: 220px;
+      width: 180px;
+      height: 175px;
       display: block;
     }
     
     .card-name {
       font-weight: 700;
-      font-size: 15px;
+      font-size: 13px;
       text-align: center;
       color: #000;
       max-width: 100%;
-      line-height: 1.2;
-      margin-top: 0px;
+      line-height: 1.1;
+      margin: 0px;
+      margin-bottom: 3px;
     }
     
     .card-info {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 3px;
+      gap: 6px;
       width: 100%;
-      flex: 1;
-      justify-content: flex-end;
+      flex: 0;
+      justify-content: flex-start;
     }
     
     .card-status-row {
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 4px;
+      gap: 2px;
       width: 100%;
     }
     
@@ -929,13 +939,13 @@ function BulkPrintModal({ members, theme, showNotif, onClose }) {
       gap: 1px;
       flex-wrap: wrap;
       justify-content: center;
-      width: 800%;
+      width: 100%;
       font-size: 1px;
     }
     
     .tag {
-      padding: 0px 1px;
-      border-radius: 3px;
+      padding: 0px 2px;
+      border-radius: 2px;
       background: #f3f4f6;
       color: #374151;
       border: 0.5px solid #d1d5db;
@@ -943,6 +953,7 @@ function BulkPrintModal({ members, theme, showNotif, onClose }) {
       overflow: hidden;
       text-overflow: ellipsis;
       max-width: 90%;
+      font-size: 8px;
     }
     
     .tag-status {
@@ -950,32 +961,32 @@ function BulkPrintModal({ members, theme, showNotif, onClose }) {
       color: #0369a1;
       border-color: #06b6d4;
       font-weight: 600;
-      font-size: 12px;
-      padding: 1px 6px;
-      min-height: 18px;
+      font-size: 8px;
+      padding: 0px 4px;
+      min-height: 14px;
     }
     
     .card-footer {
       width: 100%;
       text-align: center;
-      font-size: 10px;
+      font-size: 8px;
       font-weight: 600;
       color: #666;
       border-top: 1px solid #5d5f64;
-      padding-top: 6px;
-      margin-top: 8px;
+      padding-top: 3px;
+      margin-top: 3px;
     }
     
     .dot {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 5px;
-      height: 5px;
+      width: 3px;
+      height: 3px;
       border-radius: 50%;
-      margin-right: 3px;
+      margin-right: 2px;
       vertical-align: middle;
-      border: 0.75px solid currentColor;
+      border: 0.5px solid currentColor;
     }
     
     .dot-active { background: #10b981; color: #10b981; }
@@ -1016,7 +1027,7 @@ function BulkPrintModal({ members, theme, showNotif, onClose }) {
               ${card.status}
             </div>
           </div>
-          <div class="card-footer">Gamitin para sa iyong Weekly Attendance.</div>
+          <div class="card-footer">Gamitin sa iyong weekly attendance. Huwag iwawala.</div>
         </div>
       </div>
     `).join("")}

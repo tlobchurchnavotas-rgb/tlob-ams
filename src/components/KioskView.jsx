@@ -41,16 +41,17 @@ function KioskView({ members, events, attendance, setAttendance, theme, onExit, 
       window.speechSynthesis?.cancel();
       
       const utterance = new SpeechSynthesisUtterance();
+      utterance.lang = 'fil-PH'; // Filipino accent
       utterance.rate = 1.3; // Slightly faster
       utterance.pitch = 1;
       utterance.volume = 0.8;
       
       if (type === "success") {
-        utterance.text = "Attendance recorded! Welcome!";
-        utterance.pitch = 2.1;
+        utterance.text = "Attendance recorded! Welcome po!";
+        utterance.pitch = 8.1;
       } else if (type === "duplicate") {
-        utterance.text = "Already checked in today.";
-        utterance.pitch = 0.9;
+        utterance.text = "Attendance already recorded.";
+        utterance.pitch = 1.9;
       } else if (type === "error") {
         utterance.text = "Member not found. Please try again.";
         utterance.pitch = 0.8;
@@ -73,7 +74,7 @@ function KioskView({ members, events, attendance, setAttendance, theme, onExit, 
     setAttRef.current(prev => [...prev, newRec]);
     playSound("success");
     setScanStatus({ type: "success", member });
-    setRecentCheckins(prev => [{ ...newRec, memberObj: member }, ...prev].slice(0, 8));
+    setRecentCheckins(prev => [{ ...newRec, memberObj: member }, ...prev].slice(0, 15));
     setInput("");
     setTimeout(() => { setScanStatus(null); inputRef.current?.focus(); }, 2800);
   }, [playSound]);
@@ -183,8 +184,8 @@ function KioskView({ members, events, attendance, setAttendance, theme, onExit, 
   };
 
   const SC = { success: theme.success, duplicate: theme.warning, error: theme.danger };
-  const SMSG = { success: "✓ Check-in Successful!", duplicate: "⚠ Already Checked In", error: "✗ Member Not Found" };
-  const SICO = { success: "🎉", duplicate: "⚠️", error: "❌" };
+  const SMSG = { success: "✓ Check-in Successful!", duplicate: "⚠ Already Recorded", error: "✗ Member Not Found" };
+  const SICO = { success: "🎉✅", duplicate: "⚠️", error: "❌" };
 
   // carousel index for kiosk greeting
   const slides = useMemo(() => KIOSK_SLIDES || [], []);
