@@ -8,7 +8,7 @@ function BarChart({ data, color = "#6366f1" }) {
       {data.map((d, i) => (
         <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
           <div style={{ width: "100%", background: color, borderRadius: "4px 4px 0 0", height: `${(d.value / max) * 72}px`, minHeight: 4, transition: "height 0.6s ease" }} />
-          <span style={{ fontSize: 9, color: "#94a3b8", whiteSpace: "nowrap" }}>{d.label}</span>
+          <span style={{ fontSize: 11, color: "#64748b", whiteSpace: "nowrap" }}>{d.label}</span>
         </div>
       ))}
     </div>
@@ -17,30 +17,36 @@ function BarChart({ data, color = "#6366f1" }) {
 function LineChart({
   data,
   color = "#06b6d4",
-  height = 110,
+  height = 128,
   showTooltip = true,
   tooltipLabel = "value",
   formatValue,
   showValues = true,
+  axisFontSize = 10,
+  valueFontSize = 11,
+  tooltipFontSize = 9,
 }) {
   const w = 320;
-  const h = 110;
+  const h = 120;
+  const padBottom = 24;
+  const padTop = 28;
+  const chartInnerH = h - padBottom - padTop;
   const [hoverIdx, setHoverIdx] = useState(null);
 
   const max = useMemo(() => Math.max(...(data || []).map(d => d.value), 1), [data]);
   const pts = useMemo(() => {
     const n = Math.max((data || []).length, 1);
-    if (n === 1) return [{ x: 10, y: h - 10 }];
+    if (n === 1) return [{ x: 10, y: padTop + chartInnerH }];
     return (data || []).map((d, i) => ({
       x: (i / (n - 1)) * (w - 20) + 10,
-      y: h - 10 - ((d.value / max) * (h - 26)),
+      y: padTop + chartInnerH - ((d.value / max) * chartInnerH),
     }));
-  }, [data, max]);
+  }, [data, max, chartInnerH]);
 
   const path = useMemo(() => pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" "), [pts]);
   const area = useMemo(() => {
     if (!pts.length) return "";
-    return `${path} L ${pts[pts.length - 1].x} ${h - 10} L ${pts[0].x} ${h - 10} Z`;
+    return `${path} L ${pts[pts.length - 1].x} ${padTop + chartInnerH} L ${pts[0].x} ${padTop + chartInnerH} Z`;
   }, [path, pts]);
 
   const activeIdx = hoverIdx == null ? null : Math.min(Math.max(hoverIdx, 0), (data || []).length - 1);
@@ -52,8 +58,8 @@ function LineChart({
     ? (typeof formatValue === "function" ? formatValue(activeDatum.value) : String(activeDatum.value))
     : "";
 
-  const tooltipW = 74;
-  const tooltipH = 34;
+  const tooltipW = 88;
+  const tooltipH = 40;
   const tipX = activePt ? clamp(activePt.x - tooltipW / 2, 6, w - tooltipW - 6) : 0;
   const tipY = activePt ? clamp(activePt.y - tooltipH - 14, 6, h - tooltipH - 6) : 0;
 
@@ -90,7 +96,7 @@ function LineChart({
 
       {/* x labels */}
       {(data || []).map((d, i) => (
-        <text key={`t-${i}`} x={pts[i].x} y={h - 1} textAnchor="middle" fill="#94a3b8" fontSize="9">
+        <text key={`t-${i}`} x={pts[i].x} y={h - 6} textAnchor="middle" fill="#64748b" fontSize={axisFontSize} fontWeight="500">
           {d.label}
         </text>
       ))}
@@ -103,7 +109,7 @@ function LineChart({
       {/* value labels (always visible) */}
       {showValues && (data || []).map((d, i) => {
         const v = typeof formatValue === "function" ? formatValue(d.value) : String(d.value);
-        const y = Math.max(10, pts[i].y - 10);
+        const y = Math.max(padTop - 4, pts[i].y - 12);
         return (
           <text
             key={`v-${i}`}
@@ -111,7 +117,7 @@ function LineChart({
             y={y}
             textAnchor="middle"
             fill={color}
-            fontSize="9"
+            fontSize={valueFontSize}
             fontWeight="700"
             opacity={d.value > 0 ? 1 : 0.65}
           >
@@ -123,13 +129,13 @@ function LineChart({
       {/* hover guide + tooltip */}
       {showTooltip && activePt && activeDatum && (
         <g>
-          <line x1={activePt.x} x2={activePt.x} y1={12} y2={h - 12} stroke={color} strokeOpacity="0.45" strokeWidth="1.2" />
+          <line x1={activePt.x} x2={activePt.x} y1={padTop} y2={padTop + chartInnerH} stroke={color} strokeOpacity="0.45" strokeWidth="1.2" />
           <circle cx={activePt.x} cy={activePt.y} r="6.5" fill={color} opacity="0.18" />
 
           <g transform={`translate(${tipX},${tipY})`}>
             <rect width={tooltipW} height={tooltipH} rx="8" fill="#ffffff" opacity="0.95" />
-            <text x="10" y="14" fill="#0f172a" fontSize="9" fontWeight="700">{activeDatum.label}</text>
-            <text x="10" y="26" fill={color} fontSize="9" fontWeight="700">{tooltipLabel}: {valueText}</text>
+            <text x="10" y="16" fill="#0f172a" fontSize={tooltipFontSize} fontWeight="700">{activeDatum.label}</text>
+            <text x="10" y="30" fill={color} fontSize={tooltipFontSize} fontWeight="700">{tooltipLabel}: {valueText}</text>
           </g>
         </g>
       )}

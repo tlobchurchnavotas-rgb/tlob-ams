@@ -5,7 +5,7 @@ import { recordAuditLog } from "../auditLogs.js";
 
 
 // ─── VISITORS VIEW ────────────────────────────────────────────────────────────
-function VisitorsView({ visitors, setVisitors, members, setMembers, events, theme, showNotif, currentUser }) {
+function VisitorsView({ visitors, setVisitors, members, setMembers, attendance, setAttendance, events, theme, showNotif, currentUser }) {
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ name: "", contact: "", eventId: "", date: new Date().toISOString().split("T")[0], invitedBy: "", notes: "" });
 
@@ -45,6 +45,9 @@ function VisitorsView({ visitors, setVisitors, members, setMembers, events, them
       anniversary: "",
     };
     setMembers(prev => [...prev, member]);
+    setAttendance(prev => prev.map(record => record.visitorId === v.id
+      ? { ...record, memberId: newId, visitorId: null, memberName: member.name }
+      : record));
     setVisitors(prev => prev.map(x => x.id === v.id ? { ...x, convertedToMember: true } : x));
     showNotif(`${v.name} converted to member!`);
     try {

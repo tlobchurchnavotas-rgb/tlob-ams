@@ -3,8 +3,85 @@ import { createPortal } from "react-dom";
 import { Icon } from "./Icon.jsx";
 import Avatar from "./Avatar.jsx";
 import { DonutChart } from "./Charts.jsx";
-import { AGE_GROUPS } from "../constants.js";
+import { AGE_GROUPS, getJoinedDateRange } from "../constants.js";
 import { LineChart } from "./Charts.jsx";
+
+const normMemberLabel = (s) => (s || "").trim().toLowerCase().replace(/\s+/g, " ");
+
+const memberNameVariants = (member) => {
+  const variants = new Set();
+  [member.name, member.contact].forEach((label) => {
+    const n = normMemberLabel(label);
+    if (n) variants.add(n);
+  });
+  return variants;
+};
+
+/** Same rules as Member Profile: match by member ID; name only if the row has no ID. */
+const memberMatchesAttendance = (member, record) => {
+  if (record.memberId) {
+    return Boolean(member.id && record.memberId === member.id);
+  }
+  return memberNameVariants(member).has(normMemberLabel(record.memberName));
+};
+
+const getMemberAttendanceRecords = (member, attendance) =>
+  attendance.filter((a) => memberMatchesAttendance(member, a));
+
+const getMemberLastAttendanceDate = (member, attendance) => {
+  const times = getMemberAttendanceRecords(member, attendance)
+    .map((a) => new Date(a.timestamp).getTime())
+    .filter((t) => !Number.isNaN(t));
+  return times.length ? new Date(Math.max(...times)) : null;
+};
+
+const parseMemberJoinedDate = (joined) => {
+  const range = getJoinedDateRange(joined);
+  if (!range) return null;
+  const d = new Date(`${range[0]}T12:00:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
+const parseMemberCreatedDate = (createdAt) => {
+  if (!createdAt) return null;
+  const d = new Date(createdAt);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
+const getMemberAbsenceStartDate = (member, lastAttendance) =>
+  lastAttendance || parseMemberJoinedDate(member.joined) || parseMemberCreatedDate(member.createdAt);
+
+const weeksBetween = (from, to) => Math.floor((to - from) / (7 * 24 * 60 * 60 * 1000));
+
+const isAtRiskMember = (member, attendance, twoMonthsAgo) => {
+  const records = getMemberAttendanceRecords(member, attendance);
+  const lastAttendance = getMemberLastAttendanceDate(member, attendance);
+
+  if (records.length === 0) {
+    const joined = parseMemberJoinedDate(member.joined);
+    // No joined date on file → flag for follow-up (can't apply the 2-month join rule)
+    if (!joined) return true;
+    return joined < twoMonthsAgo;
+  }
+
+  return lastAttendance && lastAttendance < twoMonthsAgo;
+};
+
+const buildInactiveMemberMeta = (member, attendance, now) => {
+  const records = getMemberAttendanceRecords(member, attendance);
+  const lastAttendance = getMemberLastAttendanceDate(member, attendance);
+  const neverAttended = records.length === 0;
+  const referenceDate = getMemberAbsenceStartDate(member, lastAttendance);
+  const weeksSinceLastAttendance = referenceDate ? weeksBetween(referenceDate, now) : null;
+  const absenceBasis = lastAttendance
+    ? "last_checkin"
+    : parseMemberJoinedDate(member.joined)
+      ? "joined"
+      : parseMemberCreatedDate(member.createdAt)
+        ? "added"
+        : "unknown";
+  return { ...member, lastAttendance, neverAttended, absenceBasis, weeksSinceLastAttendance };
+};
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
 function DashboardView({ members, events, attendance, theme }) {
@@ -149,23 +226,22 @@ function DashboardView({ members, events, attendance, theme }) {
     const now = new Date();
     const twoMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, now.getDate());
 
-    // Alert 1: Inactive members (haven't attended in 2 months)
-    const inactiveMembers = members.filter(m => {
-      if (m.archived || m.status !== "Active") return false;
-      const lastAttendance = attendance
-        .filter(a => a.memberId ? a.memberId === m.id : a.memberName === m.name)
-        .map(a => new Date(a.timestamp))
-        .sort((a, b) => b - a)[0];
-      return !lastAttendance || lastAttendance < twoMonthsAgo;
-    });
+    // Alert 1: At-risk — last check-in 2+ months ago, or no check-ins for 2+ months since join/add (or on file with no dates)
+    const inactiveMembers = members
+      .filter(m => {
+        if (m.archived || m.status !== "Active") return false;
+        return isAtRiskMember(m, attendance, twoMonthsAgo);
+      })
+      .map(m => buildInactiveMemberMeta(m, attendance, now));
 
     if (inactiveMembers.length > 0) {
+      const n = inactiveMembers.length;
       alerts.push({
         id: "inactive",
         type: "inactive",
         icon: "alert",
-        title: `${inactiveMembers.length} member${inactiveMembers.length > 1 ? "s" : ""} haven't attended in 2 months`,
-        subtitle: "Consider reaching out to reconnect",
+        title: `${n} member${n === 1 ? "" : "s"} ${n === 1 ? "hasn't" : "haven't"} attended in 2 months`,
+        subtitle: "Includes members with no check-ins yet (especially when Joined date is blank). Consider reaching out to reconnect.",
         color: theme.danger,
         bgColor: `${theme.danger}12`,
         members: inactiveMembers,
@@ -386,28 +462,42 @@ function DashboardView({ members, events, attendance, theme }) {
           allLabel="All Events / Services"
         />
 
-        <div className="card" style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 13, padding: 12, minHeight: 52, display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ fontWeight: 700, fontSize: 11 }}>Average Attendance</div>
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 4 }}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: theme.accent }}>{avgWeeklyAttendance.toFixed(1)}</div>
-            <div style={{ fontSize: 11, color: theme.textMuted }}>per week</div>
+        {[
+          { label: "Average Attendance", value: avgWeeklyAttendance.toFixed(1), sub: `For ${monthLabel}`, color: theme.accent, icon: "analytics" },
+          { label: "Average New Members", value: avgWeeklyNewMembers.toFixed(1), sub: `For ${newMembersMonthLabel}`, color: theme.success, icon: "members" },
+        ].map((s, i) => (
+          <div
+            key={i}
+            className="card"
+            style={{
+              position: "relative",
+              background: `${s.color}20`,
+              border: `3px solid ${s.color}50`,
+              borderRadius: 13,
+              padding: "10px 60px 10px 16px",
+              minHeight: 52,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 10,
+            }}
+          >
+            <div style={{ position: "absolute", top: 10, right: 10, width: 36, height: 36, borderRadius: 9, background: `${s.color}30`, display: "flex", alignItems: "center", justifyContent: "center", color: s.color }}>
+              <Icon name={s.icon} size={18} />
+            </div>
+            <div style={{ fontWeight: 700, fontSize: 13 }}>{s.label}</div>
+            <div style={{ display: "flex", alignItems: "flex-end", gap: 4 }}>
+              <div style={{ fontSize: 25, fontWeight: 700, color: s.color, letterSpacing: "-.03em" }}>{s.value}</div>
+              <div style={{ fontSize: 12, color: theme.textMuted, paddingBottom: 2 }}>per week</div>
+            </div>
+            <div style={{ fontSize: 12, color: theme.textMuted }}>{s.sub}</div>
           </div>
-          <div style={{ fontSize: 10, color: theme.textMuted }}>For {monthLabel}</div>
-        </div>
-
-        <div className="card" style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 13, padding: 12, minHeight: 52, display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ fontWeight: 700, fontSize: 11 }}>Average New Members</div>
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 4 }}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: theme.success }}>{avgWeeklyNewMembers.toFixed(1)}</div>
-            <div style={{ fontSize: 11, color: theme.textMuted }}>per week</div>
-          </div>
-          <div style={{ fontSize: 10, color: theme.textMuted }}>For {newMembersMonthLabel}</div>
-        </div>
+        ))}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
         <div className="card" style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 13, padding: 18 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-            <div style={{ fontWeight: 700, fontSize: 13 }}>Weekly Attendance</div>
+            <div style={{ fontWeight: 700, fontSize: 15 }}>Weekly Attendance</div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <button
                 className="btn"
@@ -417,7 +507,7 @@ function DashboardView({ members, events, attendance, theme }) {
               >
                 <Icon name="back" size={14} />
               </button>
-              <div style={{ fontSize: 12, fontWeight: 700, color: theme.accent }}>{monthLabel}</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: theme.accent }}>{monthLabel}</div>
               <button
                 className="btn"
                 onClick={() => setWeekMonthCursor((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1))}
@@ -426,18 +516,18 @@ function DashboardView({ members, events, attendance, theme }) {
               >
                 <Icon name="back" size={14} />
               </button>
-              <div style={{ fontSize: 11, color: theme.textMuted, whiteSpace: "nowrap" }}>
+              <div style={{ fontSize: 12, color: theme.textMuted, whiteSpace: "nowrap" }}>
                 Avg: {weeklyAttendanceData.length > 0 ? (weeklyAttendanceData.reduce((sum, d) => sum + d.value, 0) / weeklyAttendanceData.length).toFixed(1) : 0}/week
               </div>
             </div>
           </div>
-          <div style={{ fontSize: 11, color: theme.textMuted, marginBottom: 10 }}>Attendance entries per week</div>
+          <div style={{ fontSize: 12, color: theme.textMuted, marginBottom: 10 }}>Attendance entries per week</div>
           <LineChart data={weeklyAttendanceData} color={theme.accent} />
         </div>
 
         <div className="card" style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 13, padding: 18 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-            <div style={{ fontWeight: 700, fontSize: 13 }}>Yearly Attendance</div>
+            <div style={{ fontWeight: 700, fontSize: 15 }}>Yearly Attendance</div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <button
                 className="btn"
@@ -447,7 +537,7 @@ function DashboardView({ members, events, attendance, theme }) {
               >
                 <Icon name="back" size={14} />
               </button>
-              <div style={{ fontSize: 12, fontWeight: 700, color: theme.accent }}>{yearCursor}</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: theme.accent }}>{yearCursor}</div>
               <button
                 className="btn"
                 onClick={() => setYearCursor((y) => y + 1)}
@@ -458,13 +548,13 @@ function DashboardView({ members, events, attendance, theme }) {
               </button>
             </div>
           </div>
-          <div style={{ fontSize: 11, color: theme.textMuted, marginBottom: 10 }}>Attendance entries per month</div>
+          <div style={{ fontSize: 12, color: theme.textMuted, marginBottom: 10 }}>Attendance entries per month</div>
           <LineChart data={yearlyAttendanceData} color={theme.accent2} />
         </div>
 
         <div className="card" style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 13, padding: 18 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-            <div style={{ fontWeight: 700, fontSize: 13 }}>New Members (Weekly)</div>
+            <div style={{ fontWeight: 700, fontSize: 15 }}>New Members (Weekly)</div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <button
                 className="btn"
@@ -474,7 +564,7 @@ function DashboardView({ members, events, attendance, theme }) {
               >
                 <Icon name="back" size={14} />
               </button>
-              <div style={{ fontSize: 12, fontWeight: 700, color: theme.accent }}>{newMembersMonthLabel}</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: theme.accent }}>{newMembersMonthLabel}</div>
               <button
                 className="btn"
                 onClick={() => setNewMembersWeekMonthCursor((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1))}
@@ -483,18 +573,18 @@ function DashboardView({ members, events, attendance, theme }) {
               >
                 <Icon name="back" size={14} />
               </button>
-              <div style={{ fontSize: 11, color: theme.textMuted, whiteSpace: "nowrap" }}>
+              <div style={{ fontSize: 12, color: theme.textMuted, whiteSpace: "nowrap" }}>
                 Avg: {weeklyNewMembersData.length > 0 ? (weeklyNewMembersData.reduce((sum, d) => sum + d.value, 0) / weeklyNewMembersData.length).toFixed(1) : 0}/week
               </div>
             </div>
           </div>
-          <div style={{ fontSize: 11, color: theme.textMuted, marginBottom: 10 }}>New members joined per week</div>
+          <div style={{ fontSize: 12, color: theme.textMuted, marginBottom: 10 }}>New members joined per week</div>
           <LineChart data={weeklyNewMembersData} color={theme.success} />
         </div>
 
         <div className="card" style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 13, padding: 18 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-            <div style={{ fontWeight: 700, fontSize: 13 }}>New Members (Yearly)</div>
+            <div style={{ fontWeight: 700, fontSize: 15 }}>New Members (Yearly)</div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <button
                 className="btn"
@@ -504,7 +594,7 @@ function DashboardView({ members, events, attendance, theme }) {
               >
                 <Icon name="back" size={14} />
               </button>
-              <div style={{ fontSize: 12, fontWeight: 700, color: theme.accent }}>{newMembersYearCursor}</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: theme.accent }}>{newMembersYearCursor}</div>
               <button
                 className="btn"
                 onClick={() => setNewMembersYearCursor((y) => y + 1)}
@@ -515,7 +605,7 @@ function DashboardView({ members, events, attendance, theme }) {
               </button>
             </div>
           </div>
-          <div style={{ fontSize: 11, color: theme.textMuted, marginBottom: 10 }}>New members joined per month</div>
+          <div style={{ fontSize: 12, color: theme.textMuted, marginBottom: 10 }}>New members joined per month</div>
           <LineChart data={yearlyNewMembersData} color={theme.warning} />
         </div>
       </div>
@@ -620,6 +710,34 @@ function DashboardView({ members, events, attendance, theme }) {
                   {alert.subtitle}
                 </div>
                 {alert.members && alert.members.length > 0 && (() => {
+                  const formatWeeksLabel = (m) => {
+                    if (m.neverAttended) {
+                      if (m.weeksSinceLastAttendance == null) {
+                        return " · no check-ins yet · add join date for weeks";
+                      }
+                      const n = m.weeksSinceLastAttendance;
+                      const unit = n === 1 ? "week" : "weeks";
+                      const since =
+                        m.absenceBasis === "joined" ? "since joined"
+                          : m.absenceBasis === "added" ? "in system (no joined date)"
+                            : "on file";
+                      return ` · no check-ins · ${n} ${unit} ${since}`;
+                    }
+                    if (m.weeksSinceLastAttendance == null) return "";
+                    const n = m.weeksSinceLastAttendance;
+                    const unit = n === 1 ? "week" : "weeks";
+                    return ` · ${n} ${unit} since last check-in`;
+                  };
+                  const formatMemberLine = (m) => {
+                    const showContact = m.contact && normMemberLabel(m.contact) !== normMemberLabel(m.name);
+                    return (
+                      <>
+                        {m.name}
+                        <span style={{ color: alert.color, fontWeight: 500 }}>{formatWeeksLabel(m)}</span>
+                        {showContact ? ` — ${m.contact}` : ""}
+                      </>
+                    );
+                  };
                   const maleMembers = alert.members.filter((m) => (m.gender || "").toLowerCase() === "male");
                   const femaleMembers = alert.members.filter((m) => (m.gender || "").toLowerCase() === "female");
                   const otherMembers = alert.members.filter((m) => {
@@ -636,7 +754,7 @@ function DashboardView({ members, events, attendance, theme }) {
                             <span style={{ background: theme.surface2, color: theme.textMuted, borderRadius: 999, padding: "0 8px", fontSize: 10, lineHeight: 1.7 }}>{maleMembers.length}</span>
                           </div>
                           {maleMembers.length > 0 ? maleMembers.map((m, i) => (
-                            <div key={i} style={{ marginBottom: 4 }}>• {m.name}{m.contact ? ` — ${m.contact}` : ""}</div>
+                            <div key={i} style={{ marginBottom: 4 }}>• {formatMemberLine(m)}</div>
                           )) : <div style={{ color: theme.textMuted, fontSize: 11 }}>No male members</div>}
                         </div>
                         <div>
@@ -645,7 +763,7 @@ function DashboardView({ members, events, attendance, theme }) {
                             <span style={{ background: theme.surface2, color: theme.textMuted, borderRadius: 999, padding: "0 8px", fontSize: 10, lineHeight: 1.7 }}>{femaleMembers.length}</span>
                           </div>
                           {femaleMembers.length > 0 ? femaleMembers.map((m, i) => (
-                            <div key={i} style={{ marginBottom: 4 }}>• {m.name}{m.contact ? ` — ${m.contact}` : ""}</div>
+                            <div key={i} style={{ marginBottom: 4 }}>• {formatMemberLine(m)}</div>
                           )) : <div style={{ color: theme.textMuted, fontSize: 11 }}>No female members</div>}
                         </div>
                       </div>
@@ -653,7 +771,7 @@ function DashboardView({ members, events, attendance, theme }) {
                         <div style={{ marginTop: 12 }}>
                           <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Other / Unknown</div>
                           {otherMembers.map((m, i) => (
-                            <div key={i} style={{ marginBottom: 4 }}>• {m.name}{m.contact ? ` — ${m.contact}` : ""}</div>
+                            <div key={i} style={{ marginBottom: 4 }}>• {formatMemberLine(m)}</div>
                           ))}
                         </div>
                       )}

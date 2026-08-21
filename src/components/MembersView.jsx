@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Icon } from "./Icon.jsx";
 import Avatar from "./Avatar.jsx";
 import { getQRDataUrl } from "../utils/qr.js";
-import { CHURCH_LOGO_SRC, AGE_GROUPS, MINISTRY_OPTIONS, normalizeJoinedDate, getJoinedDateRange, formatJoinedForDisplay } from "../constants.js";
+import { CHURCH_LOGO_SRC, AGE_GROUPS, MINISTRY_OPTIONS, normalizeJoinedDate, getJoinedDateRange, formatJoinedForDisplay, getRecordDate, isRecordedWithinFilter } from "../constants.js";
 import { canManageChurchData } from "../roles.js";
 import { recordAuditLog } from "../auditLogs.js";
 
@@ -254,7 +254,7 @@ function MembersView({ members, setMembers, events, theme, showNotif, currentUse
       const ids = members.map(m => parseInt(m.id.slice(1))).filter(n => !isNaN(n));
       const nextNum = ids.length > 0 ? Math.max(...ids) + 1 : 1;
       const newId = `M${String(nextNum).padStart(3, "0")}`;
-      const created = { id: newId, ...payload, archived: false };
+      const created = { id: newId, ...payload, archived: false, createdAt: new Date().toISOString() };
       setMembers(prev => [...prev, created]);
       showNotif("Member added");
       try {
@@ -437,7 +437,8 @@ function MembersView({ members, setMembers, events, theme, showNotif, currentUse
         const joinedRaw = joinedIdx >= 0 ? (cols[joinedIdx] || "").trim() : "";
         const today = new Date().toISOString().split("T")[0];
         const joined = normalizeJoinedDate(joinedRaw) || today;
-        return { id, name: cols[nameIdx] || "Unknown", contact: contactIdx >= 0 ? cols[contactIdx] : "", ministry: ministryIdx >= 0 ? cols[ministryIdx] : "", status: statusIdx >= 0 ? cols[statusIdx] : "Active", joined, sourceEventId: "", photo: null, archived: false };
+        const now = new Date().toISOString();
+        return { id, name: cols[nameIdx] || "Unknown", contact: contactIdx >= 0 ? cols[contactIdx] : "", ministry: ministryIdx >= 0 ? cols[ministryIdx] : "", status: statusIdx >= 0 ? cols[statusIdx] : "Active", joined, sourceEventId: "", photo: null, archived: false, createdAt: now };
       }).filter(m => m.name && m.name !== "Unknown");
       setMembers(prev => [...prev, ...newMembers]);
       showNotif(`${newMembers.length} members imported!`);
@@ -753,15 +754,32 @@ function BulkPrintModal({ members, theme, showNotif, onClose }) {
   const [filterStatus, setFilterStatus] = useState("Active");
   const [filterJoinedFrom, setFilterJoinedFrom] = useState("");
   const [filterJoinedTo, setFilterJoinedTo] = useState("");
+  const [filterRecordedFrom, setFilterRecordedFrom] = useState("");
+  const [filterRecordedTo, setFilterRecordedTo] = useState("");
   const [searchFilter, setSearchFilter] = useState("");
   const [selected, setSelected] = useState(new Set());
   const isFirstLoad = useRef(true);
+
+  const applyRecordedPreset = (days) => {
+    const to = new Date();
+    const from = new Date();
+    from.setDate(from.getDate() - (days - 1));
+    const fmt = (d) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
+    };
+    setFilterRecordedFrom(fmt(from));
+    setFilterRecordedTo(fmt(to));
+  };
 
   const filtered = activeMembers.filter(m => {
     if (filterMinistry !== "All" && !splitMinistries(m.ministry).includes(filterMinistry)) return false;
     if (filterStatus !== "All" && m.status !== filterStatus) return false;
     // Use isJoinedWithinFilter to handle partial dates (year only, year-month, year-month-day)
     if ((filterJoinedFrom || filterJoinedTo) && !isJoinedWithinFilter(m.joined, filterJoinedFrom, filterJoinedTo)) return false;
+    if ((filterRecordedFrom || filterRecordedTo) && !isRecordedWithinFilter(m.createdAt, filterRecordedFrom, filterRecordedTo)) return false;
     if (searchFilter && !m.name.toLowerCase().includes(searchFilter.toLowerCase()) && !m.id.toLowerCase().includes(searchFilter.toLowerCase())) return false;
     return true;
   });
@@ -1077,7 +1095,7 @@ function BulkPrintModal({ members, theme, showNotif, onClose }) {
               <input type="text" placeholder="Name or ID..." value={searchFilter} onChange={e => setSearchFilter(e.target.value)} />
             </div>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
             <div>
               <label>Joined From</label>
               <input type="date" value={filterJoinedFrom} onChange={e => setFilterJoinedFrom(e.target.value)} />
@@ -1087,6 +1105,26 @@ function BulkPrintModal({ members, theme, showNotif, onClose }) {
               <input type="date" value={filterJoinedTo} onChange={e => setFilterJoinedTo(e.target.value)} />
             </div>
           </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div>
+              <label>Recorded From</label>
+              <input type="date" value={filterRecordedFrom} onChange={e => setFilterRecordedFrom(e.target.value)} title="When the member was added to this system" />
+            </div>
+            <div>
+              <label>Recorded To</label>
+              <input type="date" value={filterRecordedTo} onChange={e => setFilterRecordedTo(e.target.value)} title="When the member was added to this system" />
+            </div>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10, alignItems: "center" }}>
+            <span style={{ fontSize: 11, color: theme.textMuted }}>Quick:</span>
+            <button type="button" className="btn" onClick={() => applyRecordedPreset(7)} style={{ padding: "4px 10px", fontSize: 11, borderRadius: 6, background: theme.surface, color: theme.text, border: `1px solid ${theme.border}` }}>Past 7 days</button>
+            <button type="button" className="btn" onClick={() => applyRecordedPreset(14)} style={{ padding: "4px 10px", fontSize: 11, borderRadius: 6, background: theme.surface, color: theme.text, border: `1px solid ${theme.border}` }}>Past 14 days</button>
+            <button type="button" className="btn" onClick={() => applyRecordedPreset(30)} style={{ padding: "4px 10px", fontSize: 11, borderRadius: 6, background: theme.surface, color: theme.text, border: `1px solid ${theme.border}` }}>Past 30 days</button>
+            {(filterRecordedFrom || filterRecordedTo) && (
+              <button type="button" className="btn" onClick={() => { setFilterRecordedFrom(""); setFilterRecordedTo(""); }} style={{ padding: "4px 10px", fontSize: 11, borderRadius: 6, background: "transparent", color: theme.textMuted, border: `1px solid ${theme.border}` }}>Clear recorded</button>
+            )}
+          </div>
+          <p style={{ fontSize: 10, color: theme.textMuted, marginTop: 8, marginBottom: 0 }}>Recorded = date added to AMS (not church join date). Use Joined above for when they joined ministry.</p>
         </div>
 
         {/* Member List */}
@@ -1123,6 +1161,9 @@ function BulkPrintModal({ members, theme, showNotif, onClose }) {
                   <div style={{ textAlign: "right", flexShrink: 0 }}>
                     <code style={{ fontSize: 10, background: theme.surface2, padding: "2px 6px", borderRadius: 4, color: theme.textMuted, fontFamily: "DM Mono,monospace" }}>{m.id}</code>
                     <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 2 }}>Joined {m.joined || "—"}</div>
+                    {getRecordDate(m.createdAt) && (
+                      <div style={{ fontSize: 10, color: theme.accent, marginTop: 1 }}>Recorded {getRecordDate(m.createdAt)}</div>
+                    )}
                   </div>
                   <span className={`badge tag-${m.status.toLowerCase()}`} style={{ flexShrink: 0, fontSize: 9 }}>{m.status}</span>
                 </div>

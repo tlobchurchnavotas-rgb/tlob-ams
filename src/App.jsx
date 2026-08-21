@@ -288,9 +288,11 @@ export default function TLOBApp() {
   if (kioskMode) return (
     <KioskView
       members={members}
+      visitors={visitors}
       events={events}
       attendance={attendance}
       setAttendance={setAttendance}
+      setVisitors={setVisitors}
       theme={theme}
       onExit={async () => {
         try { await document.exitFullscreen?.(); } catch {}
@@ -486,7 +488,7 @@ export default function TLOBApp() {
             : activeView === "attendance" ? <ReportsView attendance={attendance} members={members} events={events} theme={theme} showNotif={showNotif} />
             : activeView === "attendanceAnalytics" ? <AttendanceAnalyticsView attendance={attendance} members={members} events={events} theme={theme} />
             : activeView === "memberHistory" ? <MemberHistoryView attendance={attendance} members={members} events={events} theme={theme} showNotif={showNotif} />
-            : activeView === "visitors" ? <VisitorsView visitors={visitors} setVisitors={setVisitors} members={members} setMembers={setMembers} events={events} theme={theme} showNotif={showNotif} currentUser={currentUser} />
+            : activeView === "visitors" ? <VisitorsView visitors={visitors} setVisitors={setVisitors} members={members} setMembers={setMembers} attendance={attendance} setAttendance={setAttendance} events={events} theme={theme} showNotif={showNotif} currentUser={currentUser} />
             : activeView === "celebrations" ? <CelebrationsView members={members} theme={theme} />
             : activeView === "accountManagement" ? (
                 canManageAccounts(currentUser?.role) ? (

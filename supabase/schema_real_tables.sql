@@ -77,6 +77,7 @@ create table if not exists public.attendance (
   owner_id uuid not null references auth.users(id) on delete cascade,
   id text not null,
   member_id text,
+  visitor_id text,
   event_id text,
   timestamp timestamptz,
   member_name text,
@@ -84,6 +85,8 @@ create table if not exists public.attendance (
   updated_at timestamptz not null default now(),
   primary key (owner_id, id)
 );
+
+alter table public.attendance add column if not exists visitor_id text;
 
 drop trigger if exists trg_attendance_updated_at on public.attendance;
 create trigger trg_attendance_updated_at

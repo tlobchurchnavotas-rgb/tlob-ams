@@ -78,6 +78,25 @@ function formatJoinedForDisplay(value) {
   return v;
 }
 
+/** Local calendar date (yyyy-mm-dd) when the member row was created in the system. */
+function getRecordDate(createdAt) {
+  if (!createdAt) return null;
+  const d = new Date(createdAt);
+  if (Number.isNaN(d.getTime())) return null;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function isRecordedWithinFilter(createdAt, from, to) {
+  const day = getRecordDate(createdAt);
+  if (!day) return false;
+  if (from && day < from) return false;
+  if (to && day > to) return false;
+  return true;
+}
+
 // ─── PERSISTENT STORAGE HOOK ──────────────────────────────────────────────────
 function usePersisted(key, initial, ownerId = null) {
   const storageKey = "tlob_" + key;
@@ -232,6 +251,7 @@ function useSupabaseTable(tableName, initialArray, ownerId) {
     // Supabase `date` columns cannot accept empty string; convert "" -> null.
     if (tableName === "members") {
       const out = { ...r };
+      delete out.createdAt;
       out.joined = normalizeJoinedDate(out.joined);
       out.birthday = normalizeDate(out.birthday);
       out.anniversary = normalizeDate(out.anniversary);
@@ -251,6 +271,7 @@ function useSupabaseTable(tableName, initialArray, ownerId) {
       const out = { ...r };
       // map camelCase -> snake_case
       if (out.memberId !== undefined) { out.member_id = out.memberId; delete out.memberId; }
+      if (out.visitorId !== undefined) { out.visitor_id = out.visitorId; delete out.visitorId; }
       if (out.eventId !== undefined) { out.event_id = out.eventId; delete out.eventId; }
       if (out.memberName !== undefined) { out.member_name = out.memberName; delete out.memberName; }
       return out;
@@ -271,6 +292,7 @@ function useSupabaseTable(tableName, initialArray, ownerId) {
     if (!r || typeof r !== "object") return r;
     if (tableName === "members") {
       const out = { ...r };
+      if (out.created_at !== undefined) { out.createdAt = out.created_at; delete out.created_at; }
       if (out.age_group !== undefined) { out.ageGroup = out.age_group; delete out.age_group; }
       if (out.source_event_id !== undefined) { out.sourceEventId = out.source_event_id; delete out.source_event_id; }
       return out;
@@ -278,6 +300,7 @@ function useSupabaseTable(tableName, initialArray, ownerId) {
     if (tableName === "attendance") {
       const out = { ...r };
       if (out.member_id !== undefined) { out.memberId = out.member_id; delete out.member_id; }
+      if (out.visitor_id !== undefined) { out.visitorId = out.visitor_id; delete out.visitor_id; }
       if (out.event_id !== undefined) { out.eventId = out.event_id; delete out.event_id; }
       if (out.member_name !== undefined) { out.memberName = out.member_name; delete out.member_name; }
       return out;
@@ -339,7 +362,11 @@ function useSupabaseTable(tableName, initialArray, ownerId) {
           .eq("owner_id", ownerId);
         if (error) throw error;
 
-        const cleaned = (data || []).map(({ owner_id, created_at, updated_at, ...rest }) => fromDbRow(rest));
+        const cleaned = (data || []).map(({ owner_id, created_at, updated_at, ...rest }) => {
+          const row = fromDbRow(rest);
+          if (tableName === "members") row.createdAt = created_at || row.createdAt || null;
+          return row;
+        });
         const next = cleaned.length ? cleaned : initialArray;
         if (!cancelled) {
           setRows(next);
@@ -519,7 +546,11 @@ function useSupabaseTable(tableName, initialArray, ownerId) {
               .select("*")
               .eq("owner_id", ownerId);
             if (error) throw error;
-            const cleaned = (data || []).map(({ owner_id, created_at, updated_at, ...rest }) => fromDbRow(rest));
+            const cleaned = (data || []).map(({ owner_id, created_at, updated_at, ...rest }) => {
+              const row = fromDbRow(rest);
+              if (tableName === "members") row.createdAt = created_at || row.createdAt || null;
+              return row;
+            });
             // Don't mark as a user change; this is server-authoritative.
             userChangedRef.current = false;
             lastSyncedIdsRef.current = new Set((cleaned || []).map((r) => r?.id).filter(Boolean));
@@ -632,4 +663,6 @@ export {
   normalizeJoinedDate,
   getJoinedDateRange,
   formatJoinedForDisplay,
+  getRecordDate,
+  isRecordedWithinFilter,
 };
