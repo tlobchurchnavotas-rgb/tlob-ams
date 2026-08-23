@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { Icon } from "./Icon.jsx";
 import Avatar from "./Avatar.jsx";
-import { getQRDataUrl } from "../utils/qr.js";
+import JSZip from "jszip";
+import { getQRDataUrl, getQRCardJpgDataUrl, downloadDataUrl } from "../utils/qr.js";
 import { CHURCH_LOGO_SRC, AGE_GROUPS, MINISTRY_OPTIONS, normalizeJoinedDate, getJoinedDateRange, formatJoinedForDisplay, getRecordDate, isRecordedWithinFilter } from "../constants.js";
 import { canManageChurchData } from "../roles.js";
 import { recordAuditLog } from "../auditLogs.js";
@@ -106,6 +107,17 @@ function MembersView({ members, setMembers, events, theme, showNotif, currentUse
     a.remove();
     URL.revokeObjectURL(url);
     showNotif(`Exported ${visible.length} member${visible.length !== 1 ? "s" : ""} to CSV`);
+  };
+
+  const downloadMemberQR = async (member) => {
+    try {
+      const dataUrl = await getQRCardJpgDataUrl(member, CHURCH_LOGO_SRC);
+      const safeName = (member.name || member.id).replace(/[^a-z0-9]+/gi, "_").replace(/^_|_$/g, "");
+      downloadDataUrl(dataUrl, `${member.id}_${safeName}_qr_card.jpg`);
+      showNotif(`Downloaded ${member.name}'s QR code`);
+    } catch {
+      showNotif("Unable to download QR code", "error");
+    }
   };
 
   const openPdfPrintForVisible = () => {
@@ -564,6 +576,9 @@ function MembersView({ members, setMembers, events, theme, showNotif, currentUse
                     <button className="btn" onClick={() => onViewProfile(m)} style={{ background: `${theme.accent2}15`, color: theme.accent2, padding: "5px 9px", borderRadius: 6, fontSize: 11, display: "flex", alignItems: "center", gap: 3 }}>
                       <Icon name="profile" size={12} /> Profile
                     </button>
+                    <button className="btn" onClick={() => downloadMemberQR(m)} title={`Download ${m.name}'s QR code as JPG`} style={{ background: `${theme.success}15`, color: theme.success, padding: "5px 9px", borderRadius: 6, fontSize: 11, display: "flex", alignItems: "center", gap: 3 }}>
+                      <Icon name="download" size={12} /> JPG
+                    </button>
                     {canManageChurchData(currentUser.role) && !m.archived && (
                       <>
                         <button className="btn" onClick={() => openEdit(m)} style={{ background: `${theme.accent}15`, color: theme.accent, padding: "5px 9px", borderRadius: 6, fontSize: 11, display: "flex", alignItems: "center", gap: 3 }}>
@@ -758,6 +773,7 @@ function BulkPrintModal({ members, theme, showNotif, onClose }) {
   const [filterRecordedTo, setFilterRecordedTo] = useState("");
   const [searchFilter, setSearchFilter] = useState("");
   const [selected, setSelected] = useState(new Set());
+  const [isDownloading, setIsDownloading] = useState(false);
   const isFirstLoad = useRef(true);
 
   const applyRecordedPreset = (days) => {
@@ -805,6 +821,41 @@ function BulkPrintModal({ members, theme, showNotif, onClose }) {
   const someFilteredSelected = filtered.some(m => selected.has(m.id));
 
   const selectedMembers = activeMembers.filter(m => selected.has(m.id));
+
+  const downloadSelectedQRs = async () => {
+    if (selectedMembers.length === 0 || isDownloading) { if (!selectedMembers.length) showNotif("Walang napiling member!", "error"); return; }
+    setIsDownloading(true);
+    showNotif(`Preparing ${selectedMembers.length} QR card${selectedMembers.length !== 1 ? "s" : ""}...`);
+    try {
+      const zip = selectedMembers.length > 1 ? new JSZip() : null;
+      const batchSize = 6;
+      for (let start = 0; start < selectedMembers.length; start += batchSize) {
+        const batch = selectedMembers.slice(start, start + batchSize);
+        const renderedCards = await Promise.all(batch.map(async member => {
+          const dataUrl = await getQRCardJpgDataUrl(member, CHURCH_LOGO_SRC);
+          const safeName = (member.name || member.id).replace(/[^a-z0-9]+/gi, "_").replace(/^_|_$/g, "");
+          return { dataUrl, filename: `${member.id}_${safeName}_qr_card.jpg` };
+        }));
+        renderedCards.forEach(({ dataUrl, filename }) => {
+          if (zip) zip.file(filename, dataUrl.split(",")[1], { base64: true });
+          else downloadDataUrl(dataUrl, filename);
+        });
+      }
+      if (zip) {
+        const zipData = await zip.generateAsync({ type: "blob", compression: "STORE" });
+        const url = URL.createObjectURL(zipData);
+        downloadDataUrl(url, `TLOB_QR_Cards_${new Date().toISOString().slice(0, 10)}.zip`);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+      showNotif(selectedMembers.length > 1
+        ? `Downloaded ${selectedMembers.length} QR cards in one ZIP!`
+        : "Downloaded QR card as JPG!");
+    } catch {
+      showNotif("Some QR codes could not be downloaded", "error");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   const doPrint = async () => {
     if (selectedMembers.length === 0) { showNotif("Walang napiling member!", "error"); return; }
@@ -1184,6 +1235,10 @@ function BulkPrintModal({ members, theme, showNotif, onClose }) {
             <button className="btn" onClick={doPrint} disabled={selected.size === 0}
               style={{ background: selected.size === 0 ? theme.surface3 : "linear-gradient(135deg,#10b981,#059669)", color: selected.size === 0 ? theme.textMuted : "white", padding: "9px 20px", borderRadius: 9, fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 7, cursor: selected.size === 0 ? "not-allowed" : "pointer", boxShadow: selected.size > 0 ? "0 4px 14px rgba(16,185,129,.3)" : "none" }}>
               <Icon name="print" size={14} /> Print {selected.size > 0 ? `${selected.size} Card${selected.size !== 1 ? "s" : ""}` : ""}
+            </button>
+            <button className="btn" onClick={downloadSelectedQRs} disabled={selected.size === 0 || isDownloading}
+              style={{ background: selected.size === 0 || isDownloading ? theme.surface3 : `${theme.accent2}18`, color: selected.size === 0 || isDownloading ? theme.textMuted : theme.accent2, padding: "9px 14px", borderRadius: 9, fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 7, cursor: selected.size === 0 || isDownloading ? "not-allowed" : "pointer", border: `1px solid ${selected.size === 0 || isDownloading ? theme.border : `${theme.accent2}30`}` }}>
+              <Icon name="download" size={14} /> {isDownloading ? "Preparing..." : `Download JPG ${selected.size > 0 ? `(${selected.size})` : ""}`}
             </button>
           </div>
         </div>
