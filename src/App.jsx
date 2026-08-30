@@ -53,6 +53,7 @@ export default function TLOBApp() {
   const [attendance, setAttendance, attendanceSync] = useSupabaseTable("attendance", initialAttendance, ownerId);
   const [visitors, setVisitors, visitorsSync] = useSupabaseTable("visitors", initialVisitors, ownerId);
   const [darkMode, setDarkMode] = usePersisted("darkMode", true);
+  const [completionPin, setCompletionPin] = usePersisted("completion_pin", "123456", ownerId);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [notification, setNotification] = useState(null);
   const [kioskMode, setKioskMode] = useState(false);
@@ -293,10 +294,14 @@ export default function TLOBApp() {
       attendance={attendance}
       setAttendance={setAttendance}
       setVisitors={setVisitors}
+      setEvents={setEvents}
+      currentUser={currentUser}
+      completionPin={completionPin}
       theme={theme}
-      onExit={async () => {
+      onExit={async (nextView) => {
         try { await document.exitFullscreen?.(); } catch {}
         setKioskMode(false);
+        if (nextView) setActiveView(nextView);
       }}
       showNotif={showNotif}
       initialEvent={kioskEvent}
@@ -478,7 +483,7 @@ export default function TLOBApp() {
             ? <MemberProfile member={profileMember} members={members} attendance={attendance} events={events} theme={theme} onClose={() => setProfileMember(null)} showNotif={showNotif} />
             : activeView === "dashboard" ? <DashboardView members={members} events={events} attendance={attendance} theme={theme} />
             : activeView === "members" ? <MembersView members={members} setMembers={setMembers} events={events} theme={theme} showNotif={showNotif} currentUser={currentUser} onViewProfile={setProfileMember} />
-            : activeView === "events" ? <EventsView events={events} setEvents={setEvents} attendance={attendance} setAttendance={setAttendance} members={members} theme={theme} showNotif={showNotif} currentUser={currentUser} />
+            : activeView === "events" ? <EventsView events={events} setEvents={setEvents} attendance={attendance} setAttendance={setAttendance} members={members} theme={theme} showNotif={showNotif} currentUser={currentUser} completionPin={completionPin} />
             : activeView === "scanner" ? <ScannerView members={members} events={events} attendance={attendance} setAttendance={setAttendance} theme={theme} showNotif={showNotif} currentUser={currentUser} onLaunchKiosk={async (evId) => {
               // Best-effort: request fullscreen on the user gesture that launches kiosk mode.
               try { await document.documentElement.requestFullscreen?.(); } catch {}
@@ -510,7 +515,7 @@ export default function TLOBApp() {
                   </div>
                 )
               )
-            : activeView === "adminSettings" ? <AdminSettingsView theme={theme} showNotif={showNotif} currentUser={currentUser} setCurrentUser={setCurrentUser} />
+            : activeView === "adminSettings" ? <AdminSettingsView theme={theme} showNotif={showNotif} currentUser={currentUser} setCurrentUser={setCurrentUser} completionPin={completionPin} setCompletionPin={setCompletionPin} events={events} />
             : null}
         </main>
       </div>

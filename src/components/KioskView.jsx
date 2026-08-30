@@ -2,10 +2,11 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Icon } from "./Icon.jsx";
 import Avatar from "./Avatar.jsx";
 import { CHURCH_LOGO_SRC, KIOSK_SLIDES } from "../constants.js";
+import { recordAuditLog } from "../auditLogs.js";
 
 
 // ─── KIOSK MODE ───────────────────────────────────────────────────────────────
-function KioskView({ members, visitors, events, attendance, setAttendance, setVisitors, theme, onExit, showNotif, initialEvent }) {
+function KioskView({ members, visitors, events, attendance, setAttendance, setVisitors, setEvents, currentUser, completionPin, theme, onExit, showNotif, initialEvent }) {
   const [selEv, setSelEv] = useState(() => initialEvent || events.find(e => e.status === "Active")?.id || "");
   const [input, setInput] = useState("");
   const [scanStatus, setScanStatus] = useState(null); // null | {type,member}
@@ -18,7 +19,12 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setVi
   const [isNarrow, setIsNarrow] = useState(() => (typeof window !== "undefined" ? window.innerWidth <= 1100 : false));
   const [isShort, setIsShort] = useState(() => (typeof window !== "undefined" ? window.innerHeight <= 760 : false));
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [showCompletionPin, setShowCompletionPin] = useState(false);
+  const [completionPinInput, setCompletionPinInput] = useState("");
+  const [completionPinError, setCompletionPinError] = useState("");
+  const [completionSuccess, setCompletionSuccess] = useState(false);
   const inputRef = useRef(null);
+  const completionPinRef = useRef(null);
   const scannerRef = useRef(null);
   const libRef = useRef(null);
   const membersRef = useRef(members); useEffect(() => { membersRef.current = members; }, [members]);
@@ -33,7 +39,6 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setVi
     .filter(record => record.eventId === selEv)
     .slice()
     .sort((first, second) => new Date(second.timestamp).getTime() - new Date(first.timestamp).getTime())
-    .slice(0, 15)
     .map(record => ({
       ...record,
       memberObj: members.find(member => member.id === record.memberId)
@@ -54,13 +59,13 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setVi
       window.speechSynthesis?.cancel();
       
       const utterance = new SpeechSynthesisUtterance();
-      utterance.lang = 'fil-PH'; // Filipino accent
-      utterance.rate = 1.3; // Slightly faster
+      utterance.lang = 'American'; // American accent
+      utterance.rate = 1.5; // Slightly faster
       utterance.pitch = 1;
       utterance.volume = 0.8;
       
       if (type === "success") {
-        utterance.text = "Attendance recorded! Welcome po!";
+        utterance.text = "Attendance recorded! Welcome, Impact Makers!";
         utterance.pitch = 8.1;
       } else if (type === "duplicate") {
         utterance.text = "Attendance already recorded.";
@@ -79,6 +84,11 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setVi
   const processScan = useCallback((raw) => {
     const val = (raw || "").trim(), evId = selEvRef.current;
     if (!val || !evId || statusRef.current) return;
+    const selectedEvent = events.find((event) => event.id === evId);
+    if (!selectedEvent || selectedEvent.status === "Completed") {
+      showNotif?.("This event is already completed.", "warning");
+      return;
+    }
     const mems = membersRef.current, vsts = visitorsRef.current, att = attRef.current;
     const member = mems.find(m => val === `TLOB:${m.id}:${m.name}`) || mems.find(m => m.id === val.toUpperCase()) || mems.find(m => val.toUpperCase().includes(m.id));
     const visitor = vsts.find(v => v.id === val.toUpperCase()) || vsts.find(v => v.name.toLowerCase() === val.toLowerCase());
@@ -97,7 +107,7 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setVi
     setScanStatus({ type: "success", member });
     setInput("");
     setTimeout(() => { setScanStatus(null); inputRef.current?.focus(); }, 2800);
-  }, [playSound]);
+  }, [events, playSound, showNotif]);
 
   const registerVisitor = () => {
     const name = visitorForm.name.trim();
@@ -133,6 +143,47 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setVi
     setInput("");
     playSound("success");
     setTimeout(() => { setScanStatus(null); inputRef.current?.focus(); }, 2800);
+  };
+
+  const openCompletionPin = () => {
+    if (!activeEv || activeEv.status === "Completed" || !setEvents) return;
+    setCompletionPinInput("");
+    setCompletionPinError("");
+    setCompletionSuccess(false);
+    setShowCompletionPin(true);
+  };
+
+  const closeCompletionPin = () => {
+    setShowCompletionPin(false);
+    setCompletionPinInput("");
+    setCompletionPinError("");
+    setCompletionSuccess(false);
+    inputRef.current?.focus();
+  };
+
+  const completeSelectedEvent = async (event) => {
+    event?.preventDefault();
+    if (!activeEv || activeEv.status === "Completed" || !setEvents) return;
+    if (!/^\d{6}$/.test(completionPinInput) || completionPinInput !== String(completionPin || "")) {
+      setCompletionPinError("That PIN is incorrect. Please try again.");
+      return;
+    }
+
+    setEvents((current) => current.map((event) => (
+      event.id === activeEv.id ? { ...event, status: "Completed" } : event
+    )));
+    stopCamera();
+    try {
+      await recordAuditLog({
+        actor: currentUser,
+        action: "event_completed",
+        target: activeEv.id,
+        source: "kiosk",
+        metadata: { eventId: activeEv.id },
+      });
+    } catch {}
+    setCompletionSuccess(true);
+    showNotif?.(`${activeEv.name} marked as completed`);
   };
 
   const startCamera = useCallback(async () => {
@@ -199,6 +250,15 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setVi
   }, []);
 
   useEffect(() => { if (inputRef.current) inputRef.current.focus(); }, []);
+  useEffect(() => {
+    if (!showCompletionPin) return undefined;
+    completionPinRef.current?.focus();
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape" && !completionSuccess) closeCompletionPin();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showCompletionPin, completionSuccess]);
   useEffect(() => () => { if (scannerRef.current) { try { scannerRef.current.stop(); } catch {} } }, []);
   // prevent body scrolling while kiosk is active
   useEffect(() => {
@@ -240,7 +300,7 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setVi
   };
 
   const SC = { success: theme.success, duplicate: theme.warning, error: theme.danger };
-  const SMSG = { success: "✓ Check-in Successful!", duplicate: "⚠ Already Recorded", error: "✗ Member Not Found" };
+  const SMSG = { success: "✓ Attendance Recorded", duplicate: "⚠ Already Recorded", error: "✗ Member Not Found" };
   const SICO = { success: "🎉✅", duplicate: "⚠️", error: "❌" };
 
   // carousel index for kiosk greeting
@@ -271,22 +331,22 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setVi
         <source src={`${process.env.PUBLIC_URL || ""}/videobg.mp4`} type="video/mp4" />
       </video>
       <div aria-hidden="true" style={{ position: "absolute", inset: 0, background: `linear-gradient(135deg, ${theme.bg}70, ${theme.bg}35)`, zIndex: 1, pointerEvents: "none" }} />
-      <style>{`@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}@keyframes pop{0%{transform:scale(.85);opacity:0}60%{transform:scale(1.04)}100%{transform:scale(1);opacity:1}}@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}@keyframes scanGlow{0%,100%{box-shadow:0 0 0 0 rgba(var(--glow-color),0.7),inset 0 0 20px rgba(var(--glow-color),0.2)}50%{box-shadow:0 0 0 15px rgba(var(--glow-color),0),inset 0 0 30px rgba(var(--glow-color),0.3)}}input,select{font-family:inherit;}.btn{cursor:pointer;border:none;font-family:inherit;font-weight:600;transition:all .18s;}.btn:hover{filter:brightness(1.1);}.btn:active{transform:scale(.97);}}`}</style>
+      <style>{`@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}@keyframes pop{0%{transform:scale(.85);opacity:0}60%{transform:scale(1.04)}100%{transform:scale(1);opacity:1}}@keyframes pinModal{from{opacity:0;transform:translateY(18px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}@keyframes scanGlow{0%,100%{box-shadow:0 0 0 0 rgba(var(--glow-color),0.7),inset 0 0 20px rgba(var(--glow-color),0.2)}50%{box-shadow:0 0 0 15px rgba(var(--glow-color),0),inset 0 0 30px rgba(var(--glow-color),0.3)}}input,select{font-family:inherit;}.btn{cursor:pointer;border:none;font-family:inherit;font-weight:600;transition:all .18s;}.btn:hover{filter:brightness(1.1);}.btn:active{transform:scale(.97);}}`}</style>
 
       {/* Header */}
       <div style={{ position: "relative", zIndex: 2, background: `${theme.surface}ee`, borderBottom: `1px solid ${theme.border}`, padding: `${headerPadY}px ${shellPad}px`, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: isNarrow ? "wrap" : "nowrap", gap: isNarrow ? 10 : 14 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <img src={CHURCH_LOGO_SRC} alt="Logo" style={{ width: logoSize, height: logoSize, objectFit: "contain" }} />
           <div>
-            <div style={{ fontWeight: 800, fontSize: isNarrow ? 15 : 17, letterSpacing: "-.02em" }}>TLOB Attendance Management System</div>
-            <div style={{ fontSize: 11, color: theme.textMuted }}>Kiosk Mode</div>
+            <div style={{ fontWeight: 800, fontSize: isNarrow ? 15 : 22, letterSpacing: "-.02em" }}>TLOB Attendance Management System</div>
+            <div style={{ fontSize: 15, color: theme.textMuted }}>Kiosk Mode</div>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: isNarrow ? "flex-start" : "flex-end" }}>
           {activeEv && <div style={{ textAlign: "right" }}><div style={{ fontSize: 14, fontWeight: 700 }}>{activeEv.name}</div><div style={{ fontSize: 11, color: theme.textMuted }}>{activeEv.date} • {activeEv.time}</div></div>}
           <div style={{ background: `${theme.accent}15`, borderRadius: 12, padding: "8px 16px", textAlign: "center", border: `1px solid ${theme.accent}30` }}>
             <div style={{ fontSize: 26, fontWeight: 800, color: theme.accent, lineHeight: 1 }}>{sessionCount}</div>
-            <div style={{ fontSize: 9, color: theme.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".06em" }}>Checked In</div>
+            <div style={{ fontSize: 9, color: theme.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".06em" }}>Attendance</div>
           </div>
           <button
             className="btn"
@@ -302,7 +362,7 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setVi
             title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
             style={{ background: theme.surface2, color: theme.textMuted, border: `1px solid ${theme.border}`, borderRadius: 10, padding: "8px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", gap: 7, whiteSpace: "nowrap" }}
           >
-            <Icon name={isFullscreen ? "fullscreenExit" : "fullscreen"} size={16} /> {isFullscreen ? "Exit" : "Fullscreen"}
+            <Icon name={isFullscreen ? "fullscreenExit" : "fullscreen"} size={16} /> {isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
           </button>
           <button onClick={onExit} style={{ background: theme.surface2, color: theme.textMuted, border: `1px solid ${theme.border}`, borderRadius: 10, padding: "8px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>✕ Exit Kiosk</button>
         </div>
@@ -379,13 +439,14 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setVi
           <div style={{ display: "flex", gap: 12 }}>
             {camState === "idle" && <button onClick={startCamera} style={{ background: `${theme.accent2}15`, color: theme.accent2, border: `1px solid ${theme.accent2}30`, borderRadius: 12, padding: "11px 22px", fontSize: 15, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", gap: 8 }}><Icon name="camera" size={16} />📷 Camera Scanner</button>}
             {camState !== "idle" && <button onClick={stopCamera} style={{ background: `${theme.danger}15`, color: theme.danger, border: `1px solid ${theme.danger}25`, borderRadius: 12, padding: "11px 20px", fontSize: 15, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", gap: 8 }}><Icon name="close" size={16} />Stop Camera</button>}
+            {activeEv?.status === "Active" && <button onClick={openCompletionPin} style={{ background: `${theme.success}18`, color: theme.success, border: `1px solid ${theme.success}35`, borderRadius: 12, padding: "11px 20px", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", gap: 8 }}><Icon name="check" size={16} />Complete Attendance</button>}
           </div>
 
         </div>
 
         {/* Recent checkins panel */}
         <div style={{ background: theme.surface, borderLeft: isNarrow ? "none" : `1px solid ${theme.border}`, borderTop: isNarrow ? `1px solid ${theme.border}` : "none", padding: isNarrow ? 14 : 24, display: "flex", flexDirection: "column", gap: 16, overflow: "hidden" }}>
-          <div><div style={{ fontWeight: 800, fontSize: 18 }}>Recent Attendance</div><div style={{ fontSize: 12, color: theme.textMuted, marginTop: 3 }}>This session</div></div>
+          <div><div style={{ fontWeight: 800, fontSize: 18 }}>Recent Attendance</div><div style={{ fontSize: 12, color: theme.textMuted, marginTop: 3 }}>{recentCheckins.length} recorded for this event</div></div>
           <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8, maxHeight: isNarrow ? (isShort ? 220 : 280) : undefined }}>
             {recentCheckins.length === 0 ? (
               <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, color: theme.textMuted, opacity: .5, paddingTop: 40 }}>
@@ -444,6 +505,52 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setVi
               <button className="btn" onClick={registerVisitor} disabled={!visitorForm.name.trim() || !visitorForm.eventId} style={{ background: theme.accent, color: "white", padding: "8px 20px", borderRadius: 8, fontSize: 13, opacity: visitorForm.name.trim() && visitorForm.eventId ? 1 : .5 }}>Save & Check In</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {showCompletionPin && (
+        <div
+          role="presentation"
+          onMouseDown={(event) => { if (!completionSuccess && event.target === event.currentTarget) closeCompletionPin(); }}
+          style={{ position: "fixed", inset: 0, zIndex: 1100, display: "grid", placeItems: "center", padding: 20, background: "rgba(9, 16, 28, .66)", backdropFilter: "blur(7px)" }}
+        >
+          <form onSubmit={completeSelectedEvent} aria-modal="true" role="dialog" aria-labelledby="completion-pin-title" style={{ width: "min(100%, 430px)", background: theme.surface, color: theme.text, border: `1px solid ${theme.border}`, borderRadius: 16, overflow: "hidden", boxShadow: "0 24px 70px rgba(0, 0, 0, .32)", animation: "pinModal .22s ease-out" }}>
+            {completionSuccess ? (
+              <div style={{ padding: "32px 28px 28px", textAlign: "center" }}>
+                <div style={{ width: 62, height: 62, display: "grid", placeItems: "center", margin: "0 auto 16px", borderRadius: "50%", background: `${theme.success}1c`, color: theme.success, boxShadow: `0 0 0 8px ${theme.success}0c` }}><Icon name="check" size={32} /></div>
+                <div id="completion-pin-title" style={{ fontSize: 20, fontWeight: 800 }}>Attendance completed</div>
+                <div style={{ margin: "8px auto 22px", maxWidth: 300, fontSize: 13, color: theme.textMuted, lineHeight: 1.5 }}><strong style={{ color: theme.text }}>{activeEv?.name}</strong> is now closed and ready for review.</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <button type="button" className="btn" onClick={() => onExit("events")} style={{ width: "100%", padding: "12px 16px", borderRadius: 10, background: theme.accent, color: "white", border: "none", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}><Icon name="events" size={17} />View attendance</button>
+                  <button type="button" className="btn" onClick={() => onExit()} style={{ width: "100%", padding: "11px 16px", borderRadius: 10, background: theme.surface2, color: theme.text, border: `1px solid ${theme.border}`, fontSize: 14 }}>Close kiosk mode</button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div style={{ padding: "22px 24px 18px", background: `${theme.success}10`, borderBottom: `1px solid ${theme.success}24`, display: "flex", alignItems: "flex-start", gap: 14 }}>
+                  <div style={{ width: 42, height: 42, display: "grid", placeItems: "center", flexShrink: 0, borderRadius: 12, background: `${theme.success}1c`, color: theme.success }}><Icon name="key" size={21} /></div>
+                  <div style={{ flex: 1 }}>
+                    <div id="completion-pin-title" style={{ fontSize: 18, fontWeight: 800 }}>Complete attendance</div>
+                    <div style={{ marginTop: 4, fontSize: 12, color: theme.textMuted, lineHeight: 1.45 }}>Enter the administrator PIN to close this event.</div>
+                  </div>
+                  <button type="button" className="btn" onClick={closeCompletionPin} aria-label="Cancel" style={{ background: "transparent", color: theme.textMuted, padding: 4, margin: -4 }}><Icon name="close" size={19} /></button>
+                </div>
+                <div style={{ padding: "20px 24px 24px" }}>
+                  <div style={{ padding: "11px 13px", borderRadius: 10, background: theme.surface2, border: `1px solid ${theme.border}`, marginBottom: 18 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: ".05em" }}>Selected event</div>
+                    <div style={{ marginTop: 3, fontSize: 14, fontWeight: 700 }}>{activeEv?.name}</div>
+                  </div>
+                  <label htmlFor="completion-pin" style={{ display: "block", marginBottom: 8, fontSize: 12, fontWeight: 700 }}>Six-digit PIN</label>
+                  <input ref={completionPinRef} id="completion-pin" type="password" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={completionPinInput} onChange={(event) => { setCompletionPinInput(event.target.value.replace(/\D/g, "").slice(0, 6)); setCompletionPinError(""); }} aria-invalid={Boolean(completionPinError)} aria-describedby={completionPinError ? "completion-pin-error" : undefined} placeholder="000000" style={{ width: "100%", boxSizing: "border-box", padding: "13px 15px", background: theme.surface2, color: theme.text, border: `1.5px solid ${completionPinError ? theme.danger : theme.border}`, borderRadius: 10, outline: "none", fontFamily: "'DM Mono', monospace", fontSize: 20, fontWeight: 700, letterSpacing: ".3em", textAlign: "center" }} />
+                  <div id="completion-pin-error" role="alert" style={{ minHeight: 18, marginTop: 7, fontSize: 12, color: theme.danger }}>{completionPinError}</div>
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 14 }}>
+                    <button type="button" className="btn" onClick={closeCompletionPin} style={{ padding: "10px 16px", borderRadius: 9, background: theme.surface2, color: theme.text, border: `1px solid ${theme.border}`, fontSize: 13 }}>Cancel</button>
+                    <button type="submit" className="btn" disabled={completionPinInput.length !== 6} style={{ padding: "10px 17px", borderRadius: 9, background: theme.success, color: "white", border: "none", fontSize: 13, opacity: completionPinInput.length === 6 ? 1 : .5, cursor: completionPinInput.length === 6 ? "pointer" : "not-allowed", display: "flex", alignItems: "center", gap: 7 }}><Icon name="check" size={16} />Complete event</button>
+                  </div>
+                </div>
+              </>
+            )}
+          </form>
         </div>
       )}
     </div>

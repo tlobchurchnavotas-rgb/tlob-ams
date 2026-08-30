@@ -6,7 +6,7 @@ import { recordAuditLog } from "../auditLogs.js";
 
 
 // ─── EVENTS VIEW ──────────────────────────────────────────────────────────────
-function EventsView({ events, setEvents, attendance, setAttendance, members, theme, showNotif, currentUser }) {
+function EventsView({ events, setEvents, attendance, setAttendance, members, theme, showNotif, currentUser, completionPin }) {
   const [showModal, setShowModal] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [showEditTemplate, setShowEditTemplate] = useState(false);
@@ -171,6 +171,12 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, the
   };
 
   const handleComplete = async id => {
+    const enteredPin = window.prompt("Enter the 6-digit PIN to complete this event:");
+    if (enteredPin === null) return;
+    if (!/^\d{6}$/.test(enteredPin.trim()) || enteredPin.trim() !== String(completionPin || "")) {
+      showNotif("Incorrect PIN. Event was not completed.", "error");
+      return;
+    }
     setEvents(prev => prev.map(e => e.id === id ? { ...e, status: "Completed" } : e));
     showNotif("Event marked complete");
     try {

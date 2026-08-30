@@ -112,6 +112,7 @@ tlob-church-app/
 - **Attendance Logs** — Filterable records
 - **Reports** — Attendance & absentee reports (PDF/CSV export), Admin only
 - **Visitors** — Log walk-in visitors, convert to member
+- **Public self-registration** — separate `visitor-register/` app on Vercel; visitors check themselves in (see setup below)
 - **Celebrations** — Birthday & anniversary tracker
 - **User Management** — Manage app users (Admin only)
 - **Dark / Light Mode**
@@ -145,6 +146,55 @@ REACT_APP_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
 
 4. Restart `npm start`.
+
+### Public visitor self-registration (Vercel)
+
+Guests register from a **separate** site (`visitor-register/`, deployed on Vercel). Submissions go through the `self-register` Edge Function and write a **visitor** row plus **attendance**. Staff convert visitors to members later in AMS.
+
+Do **not** open RLS on `visitors` / `attendance` for anonymous users.
+
+#### 1) Deploy the Edge Function
+
+Set the church owner UUID (the same Supabase Auth user id that owns AMS data in the desktop app):
+
+```bash
+supabase secrets set CHURCH_OWNER_ID=00000000-0000-0000-0000-000000000000
+supabase functions deploy self-register
+```
+
+`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are provided automatically by Supabase. Confirm `CHURCH_OWNER_ID` in the dashboard: **Authentication → Users** (or the `id` of the admin profile).
+
+#### 2) Deploy the register app on Vercel (not the full AMS)
+
+The guest site lives in `visitor-register/` — a separate Vite app. Do **not** deploy the whole TLOB AMS project.
+
+1. In Vercel: **Add New Project** → import this GitHub repo.
+2. Set **Root Directory** to `visitor-register`.
+3. Framework: Vite. Build command `npm run build`, output `dist`.
+4. Environment variables (Vite prefix):
+
+```bash
+VITE_SUPABASE_URL=your_supabase_project_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+Use the same URL and anon key as AMS `.env`, just rename `REACT_APP_*` → `VITE_*`.
+
+The public page is `https://your-register-app.vercel.app`. Optional event pin: `https://your-register-app.vercel.app/?event=E012`.
+
+Paste that origin in AMS **Settings → Public self-registration**.
+
+#### 3) Local preview of the register app
+
+```bash
+cd visitor-register
+copy .env.example .env
+# edit .env with your VITE_SUPABASE_* values
+npm install
+npm run dev
+```
+
+Open the Vite URL (usually `http://localhost:5173`). The Edge Function must already be deployed.
 
 #### Next phase: Real tables (recommended)
 After Auth is working, run `supabase/schema_real_tables.sql` to create real tables:

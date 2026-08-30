@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { isSupabaseConfigured, supabase } from "../supabaseClient.js";
 import { Icon } from "./Icon.jsx";
 import { recordAuditLog } from "../auditLogs.js";
+import { usePersisted } from "../constants.js";
+import { QRCode } from "../utils/qr.js";
 import packageJson from "../../package.json";
 
 function deriveUsernameFromEmail(email) {
@@ -26,18 +28,36 @@ function saveLocalProfile(userId, profile) {
   } catch {}
 }
 
-export default function AdminSettingsView({ theme, showNotif, currentUser, setCurrentUser }) {
+export default function AdminSettingsView({ theme, showNotif, currentUser, setCurrentUser, completionPin, setCompletionPin, events = [] }) {
   const userId = currentUser?.id ?? null;
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ name: "", username: "", avatarUrl: "" });
+  const [pinInput, setPinInput] = useState(completionPin || "");
   const [checkingUpdates, setCheckingUpdates] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateInfo, setUpdateInfo] = useState(null);
   const [downloadingUpdate, setDownloadingUpdate] = useState(false);
   const fileInputRef = useRef(null);
+  const [publicRegisterEnabled, setPublicRegisterEnabled] = usePersisted("public_register_enabled", true, userId);
+  const [publicRegisterBaseUrl, setPublicRegisterBaseUrl] = usePersisted("public_register_base_url", "", userId);
+  const [registerEventId, setRegisterEventId] = useState("");
 
   const canUseDb = useMemo(() => Boolean(isSupabaseConfigured && supabase && userId), [userId]);
+  const openEvents = useMemo(
+    () => (events || []).filter((e) => e.status === "Active" || e.status === "Upcoming"),
+    [events],
+  );
+  const publicRegisterUrl = useMemo(() => {
+    const origin = String(publicRegisterBaseUrl || "").trim().replace(/\/$/, "");
+    if (!origin || origin.startsWith("file:")) return "";
+    const qs = registerEventId ? `?event=${encodeURIComponent(registerEventId)}` : "";
+    return `${origin}${qs}`;
+  }, [publicRegisterBaseUrl, registerEventId]);
+
+  useEffect(() => {
+    setPinInput(completionPin || "");
+  }, [completionPin]);
 
   useEffect(() => {
     let cancelled = false;
@@ -120,6 +140,7 @@ export default function AdminSettingsView({ theme, showNotif, currentUser, setCu
     if (form.avatarUrl && !/^https?:\/\//i.test(form.avatarUrl) && !form.avatarUrl.startsWith("data:image/")) {
       return "Profile picture must be a valid URL or uploaded image.";
     }
+    if (!/^\d{6}$/.test(pinInput)) return "Completion PIN must contain exactly 6 digits.";
     return null;
   };
 
@@ -219,6 +240,7 @@ export default function AdminSettingsView({ theme, showNotif, currentUser, setCu
         username: payload.username,
         avatarUrl: payload.avatar_url || "",
       }));
+      setCompletionPin(pinInput);
       showNotif("Settings saved");
       try {
         await recordAuditLog({
@@ -356,6 +378,23 @@ export default function AdminSettingsView({ theme, showNotif, currentUser, setCu
               />
             </div>
 
+            <div style={{ padding: "12px 14px", borderRadius: 12, background: theme.surface2, border: `1px solid ${theme.border}` }}>
+              <label>Event Completion PIN</label>
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={6}
+                value={pinInput}
+                disabled={loading || saving}
+                onChange={(e) => setPinInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                placeholder="Enter 6-digit PIN"
+                aria-describedby="completion-pin-help"
+              />
+              <div id="completion-pin-help" style={{ marginTop: 6, fontSize: 12, color: theme.textMuted }}>
+                Required before completing an event from the Events page or kiosk. Default PIN: 123456.
+              </div>
+            </div>
+
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", padding: "10px 12px", borderRadius: 12, background: theme.surface2, border: `1px solid ${theme.border}`, fontSize: 12, color: theme.textMuted }}>
               <div><b style={{ color: theme.text }}>Account:</b> {currentUser?.email || "—"}</div>
               <div><b style={{ color: theme.text }}>Role:</b> {currentUser?.role || "—"}</div>
@@ -363,6 +402,76 @@ export default function AdminSettingsView({ theme, showNotif, currentUser, setCu
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="card" style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, padding: 18 }}>
+        <div style={{ fontSize: 14, fontWeight: 800, letterSpacing: "-.01em" }}>Public self-registration</div>
+        <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 4, marginBottom: 14 }}>
+          Guests can log as visitors and check in from their phone. Staff convert them to members later from Visitors.
+        </div>
+        <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", marginBottom: 14 }}>
+          <input
+            type="checkbox"
+            checked={Boolean(publicRegisterEnabled)}
+            onChange={(e) => setPublicRegisterEnabled(e.target.checked)}
+          />
+          <span style={{ fontSize: 13, fontWeight: 600, textTransform: "none", letterSpacing: 0, color: theme.text }}>Enable public registration link</span>
+        </label>
+        {publicRegisterEnabled && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div>
+              <label>Public register app URL (Vercel)</label>
+              <input
+                type="url"
+                value={publicRegisterBaseUrl}
+                onChange={(e) => setPublicRegisterBaseUrl(e.target.value)}
+                placeholder="https://tlob-register.vercel.app"
+              />
+              <div style={{ marginTop: 6, fontSize: 12, color: theme.textMuted }}>
+                Paste the URL of the separate visitor-register app (not the AMS desktop/site).
+              </div>
+            </div>
+            <div>
+              <label>Pin to event (optional QR)</label>
+              <select value={registerEventId} onChange={(e) => setRegisterEventId(e.target.value)}>
+                <option value="">Any open event (guest chooses)</option>
+                {openEvents.map((ev) => (
+                  <option key={ev.id} value={ev.id}>{ev.name}{ev.date ? ` (${ev.date})` : ""}</option>
+                ))}
+              </select>
+            </div>
+            {publicRegisterUrl ? (
+              <div style={{ display: "flex", gap: 14, alignItems: "flex-start", flexWrap: "wrap" }}>
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  <label>Shareable link</label>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input type="text" readOnly value={publicRegisterUrl} />
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(publicRegisterUrl);
+                          showNotif("Registration link copied");
+                        } catch {
+                          showNotif("Could not copy link", "error");
+                        }
+                      }}
+                      style={{ background: theme.accent, color: "white", padding: "8px 12px", borderRadius: 10, fontSize: 12, whiteSpace: "nowrap" }}
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </div>
+                <div style={{ padding: 8, background: "#fff", borderRadius: 10, border: `1px solid ${theme.border}` }}>
+                  <QRCode value={publicRegisterUrl} size={112} />
+                </div>
+              </div>
+            ) : (
+              <div style={{ fontSize: 12, color: theme.textMuted }}>Enter your visitor-register Vercel URL above to generate a shareable link.</div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="card" style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, padding: 18 }}>
