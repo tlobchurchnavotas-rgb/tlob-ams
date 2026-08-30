@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Icon } from "./Icon.jsx";
 import Avatar from "./Avatar.jsx";
-import { CHURCH_LOGO_SRC, KIOSK_SLIDES } from "../constants.js";
+import { CHURCH_LOGO_SRC, KIOSK_SLIDES, usePersisted } from "../constants.js";
 import { recordAuditLog } from "../auditLogs.js";
+import { QRCode } from "../utils/qr.js";
 
 
 // ─── KIOSK MODE ───────────────────────────────────────────────────────────────
@@ -19,6 +20,7 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setVi
   const [isNarrow, setIsNarrow] = useState(() => (typeof window !== "undefined" ? window.innerWidth <= 1100 : false));
   const [isShort, setIsShort] = useState(() => (typeof window !== "undefined" ? window.innerHeight <= 760 : false));
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [showRegisterQr, setShowRegisterQr] = useState(false);
   const [showCompletionPin, setShowCompletionPin] = useState(false);
   const [completionPinInput, setCompletionPinInput] = useState("");
   const [completionPinError, setCompletionPinError] = useState("");
@@ -33,6 +35,14 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setVi
   const selEvRef = useRef(selEv); useEffect(() => { selEvRef.current = selEv; }, [selEv]);
   const setAttRef = useRef(setAttendance); useEffect(() => { setAttRef.current = setAttendance; }, [setAttendance]);
   const statusRef = useRef(scanStatus); useEffect(() => { statusRef.current = scanStatus; }, [scanStatus]);
+  const [publicRegisterEnabled] = usePersisted("public_register_enabled", true, currentUser?.id ?? null);
+  const [publicRegisterBaseUrl] = usePersisted("public_register_base_url", "", currentUser?.id ?? null);
+  const visitorRegisterUrl = useMemo(() => {
+    const origin = String(publicRegisterBaseUrl || "").trim().replace(/\/$/, "");
+    if (!origin || origin.startsWith("file:")) return "";
+    const qs = selEv ? `?event=${encodeURIComponent(selEv)}` : "";
+    return `${origin}${qs}`;
+  }, [publicRegisterBaseUrl, selEv]);
   const activeEv = events.find(e => e.id === selEv);
   const sessionCount = attendance.filter(a => a.eventId === selEv).length;
   const recentCheckins = useMemo(() => attendance
@@ -370,7 +380,7 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setVi
 
       <div style={{ position: "relative", zIndex: 2, flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: isNarrow ? "1fr" : `1fr ${sidePanelWidth}px`, gridTemplateRows: isNarrow ? "auto 1fr" : undefined, overflow: "hidden" }}>
         {/* Main scan area */}
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: isNarrow ? "flex-start" : "center", padding: isNarrow ? 14 : 24, gap: 16, overflowY: isNarrow ? "auto" : "hidden" }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: isNarrow ? "flex-start" : "center", padding: isNarrow ? 14 : 24, gap: 10, overflowY: isNarrow ? "auto" : "hidden" }}>
           {/* Status card */}
           {scanStatus ? (
             <div style={{ animation: "pop .35s ease", background: `${SC[scanStatus.type]}38`, border: `2px solid ${SC[scanStatus.type]}40`, borderRadius: 22, padding: isNarrow ? "20px 18px" : "28px 42px", textAlign: "center", width: "100%", maxWidth: isNarrow ? 720 : 500 }}>
@@ -382,7 +392,7 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setVi
           ) : (
             <div style={{ background: theme.surface, border: `2px dashed ${theme.border}`, borderRadius: 22, padding: isNarrow ? "22px 18px" : "32px 42px", textAlign: "center", width: "100%", maxWidth: isNarrow ? 720 : 500 }}>
               {slides.length > 0 ? (
-                <img src={slides[slideIdx]} alt="Greeting" style={{ maxWidth: 200, maxHeight: 120, marginBottom: 10, objectFit: "contain" }} />
+                <img src={slides[slideIdx]} alt="Greeting" style={{ maxWidth: 100, maxHeight: 120, marginBottom: 10, objectFit: "contain" }} />
               ) : (
                 <div style={{ fontSize: 72, marginBottom: 10 }}>🎉</div>
               )}
@@ -459,7 +469,7 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setVi
                   <div style={{ fontWeight: 700, fontSize: 13 }}>{a.memberName}</div>
                   <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 1 }}>{a.memberId || a.visitorId || "—"} • {new Date(a.timestamp).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</div>
                 </div>
-                {i === 0 && <div style={{ width: 9, height: 9, borderRadius: "50%", background: theme.success, boxShadow: `0 0 8px ${theme.success}` }} />}
+                {i === 0 && <div style={{ width: 9, height: 6, borderRadius: "50%", background: theme.success, boxShadow: `0 0 8px ${theme.success}` }} />}
               </div>
             ))}
           </div>
@@ -468,19 +478,60 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setVi
 
       <div
         aria-hidden="true"
-        style={{ position: "absolute", left: 0, right: isNarrow ? 0 : sidePanelWidth, bottom: 0, height: 77, zIndex: 3, background: `${theme.surface}ee`, borderTop: `1px solid ${theme.border}`, boxShadow: "0 -4px 14px rgba(0,0,0,.08)", pointerEvents: "none" }}
+        style={{ position: "absolute", left: 0, right: isNarrow ? 0 : sidePanelWidth, bottom: 0, height: 70, zIndex: 3, background: `${theme.surface}ee`, borderTop: `1px solid ${theme.border}`, boxShadow: "0 -4px 14px rgba(0,0,0,.08)", pointerEvents: "none" }}
       />
 
-      <button
-        onClick={() => {
-          setScanStatus(null);
-          setVisitorForm({ name: "", contact: "", eventId: selEv, date: new Date().toISOString().split("T")[0], invitedBy: "", notes: "" });
-          setShowVisitorForm(true);
-        }}
-        style={{ position: "fixed", left: 18, bottom: 18, zIndex: 10, background: theme.accent, color: "white", border: "none", borderRadius: 12, padding: "11px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", boxShadow: `0 6px 18px ${theme.accent}45`, display: "flex", alignItems: "center", gap: 7 }}
-      >
-        <Icon name="add" size={19} /> Register New Visitor / Member
-      </button>
+      <div style={{ position: "fixed", left: 14, bottom: 14, zIndex: 12, display: "flex", gap: 8, flexWrap: "wrap", maxWidth: "calc(100% - 36px)" }}>
+        <button
+          onClick={() => {
+            setScanStatus(null);
+            setVisitorForm({ name: "", contact: "", eventId: selEv, date: new Date().toISOString().split("T")[0], invitedBy: "", notes: "" });
+            setShowVisitorForm(true);
+          }}
+          style={{ background: theme.accent, color: "white", border: "none", borderRadius: 12, padding: "11px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", boxShadow: `0 6px 18px ${theme.accent}45`, display: "flex", alignItems: "center", gap: 7 }}
+        >
+          <Icon name="add" size={17} /> Register New Visitor / Member
+        </button>
+        {publicRegisterEnabled && (
+          <button
+            onClick={() => {
+              if (!visitorRegisterUrl) {
+                showNotif?.("Paste the visitor-register Vercel URL in Settings first.", "warning");
+                return;
+              }
+              setShowRegisterQr(true);
+            }}
+            style={{ background: theme.surface, color: theme.text, border: `1px solid ${theme.border}`, borderRadius: 12, padding: "11px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", boxShadow: "0 6px 18px rgba(0,0,0,.12)", display: "flex", alignItems: "center", gap: 7 }}
+          >
+            <Icon name="qr" size={19} /> Visitor QR
+          </button>
+        )}
+      </div>
+
+      {showRegisterQr && visitorRegisterUrl && (
+        <div
+          className="modal-overlay"
+          onClick={() => setShowRegisterQr(false)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.7)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100 }}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{ background: theme.surface, color: theme.text, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 26, width: "calc(100% - 32px)", maxWidth: 400, textAlign: "center", fontFamily: "'DM Sans', sans-serif", boxSizing: "border-box" }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>Scan to self-register</h2>
+              <button className="btn" onClick={() => setShowRegisterQr(false)} style={{ background: "transparent", color: theme.textMuted, padding: 4 }} aria-label="Close"><Icon name="close" size={18} /></button>
+            </div>
+            <div style={{ fontSize: 13, color: theme.textMuted, lineHeight: 1.45, marginBottom: 16 }}>
+              New visitors can scan this with their phone. {activeEv ? <>Pinned to <strong style={{ color: theme.text }}>{activeEv.name}</strong>.</> : "Select an event to pin the form."}
+            </div>
+            <div style={{ display: "inline-block", padding: 12, background: "#fff", borderRadius: 14, border: `1px solid ${theme.border}` }}>
+              <QRCode value={visitorRegisterUrl} size={240} />
+            </div>
+            <div style={{ marginTop: 12, fontSize: 11, color: theme.textMuted, wordBreak: "break-all" }}>{visitorRegisterUrl}</div>
+          </div>
+        </div>
+      )}
 
       {showVisitorForm && (
         <div className="modal-overlay" onClick={() => { setShowVisitorForm(false); setScanStatus(null); }} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.7)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>

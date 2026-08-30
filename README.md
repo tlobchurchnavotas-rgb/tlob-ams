@@ -153,6 +153,8 @@ Guests register from a **separate** site (`visitor-register/`, deployed on Verce
 
 Do **not** open RLS on `visitors` / `attendance` for anonymous users.
 
+For the kiosk to show self-registrations live, run `supabase/schema_realtime.sql` once in the SQL Editor (enables Realtime on those tables). The app also polls attendance/visitors every few seconds as a fallback.
+
 #### 1) Deploy the Edge Function
 
 Set the church owner UUID (the same Supabase Auth user id that owns AMS data in the desktop app):

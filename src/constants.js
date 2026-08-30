@@ -524,11 +524,58 @@ function useSupabaseTable(tableName, initialArray, ownerId) {
     };
   }, [hydrated, ownerId, syncNow]);
 
+  const rowsFromDb = useCallback((data) => (
+    (data || []).map(({ owner_id, created_at, updated_at, ...rest }) => {
+      const row = fromDbRow(rest);
+      if (tableName === "members") row.createdAt = created_at || row.createdAt || null;
+      return row;
+    })
+  ), [fromDbRow, tableName]);
+
+  const applyServerSnapshot = useCallback((data) => {
+    const cleaned = rowsFromDb(data);
+    const local = latestRowsRef.current || [];
+
+    if (userChangedRef.current) {
+      const byId = new Map(local.map((row) => [row.id, row]));
+      cleaned.forEach((row) => {
+        if (row?.id && !byId.has(row.id)) byId.set(row.id, row);
+      });
+      const merged = Array.from(byId.values());
+      latestRowsRef.current = merged;
+      setRows(merged);
+      return;
+    }
+
+    const sameLength = local.length === cleaned.length;
+    const sameIds = sameLength && local.every((row, i) => row?.id === cleaned[i]?.id);
+    const sameFp = sameIds && local.every((row, i) => JSON.stringify(toDbRow(row)) === JSON.stringify(toDbRow(cleaned[i])));
+    if (sameFp) return;
+
+    const fp = new Map();
+    cleaned.forEach((row) => {
+      if (!row?.id) return;
+      fp.set(row.id, JSON.stringify(toDbRow(row)));
+    });
+    lastSyncedFingerprintRef.current = fp;
+    lastSyncedIdsRef.current = new Set(cleaned.map((r) => r?.id).filter(Boolean));
+    latestRowsRef.current = cleaned;
+    setRows(cleaned);
+  }, [rowsFromDb, toDbRow]);
+
   useEffect(() => {
     if (!hydrated) return;
     if (!isSupabaseConfigured || !supabase || !ownerId) return;
 
-    // Realtime updates (instant UI refresh when DB changes).
+    const pull = async () => {
+      const { data, error } = await supabase
+        .from(tableName)
+        .select("*")
+        .eq("owner_id", ownerId);
+      if (error) throw error;
+      applyServerSnapshot(data);
+    };
+
     const channel = supabase
       .channel(`rt:${tableName}:${ownerId}`)
       .on(
@@ -539,33 +586,21 @@ function useSupabaseTable(tableName, initialArray, ownerId) {
           table: tableName,
           filter: `owner_id=eq.${ownerId}`,
         },
-        async () => {
-          try {
-            const { data, error } = await supabase
-              .from(tableName)
-              .select("*")
-              .eq("owner_id", ownerId);
-            if (error) throw error;
-            const cleaned = (data || []).map(({ owner_id, created_at, updated_at, ...rest }) => {
-              const row = fromDbRow(rest);
-              if (tableName === "members") row.createdAt = created_at || row.createdAt || null;
-              return row;
-            });
-            // Don't mark as a user change; this is server-authoritative.
-            userChangedRef.current = false;
-            lastSyncedIdsRef.current = new Set((cleaned || []).map((r) => r?.id).filter(Boolean));
-            setRows(cleaned);
-          } catch {
-            // ignore
-          }
-        }
+        () => { pull().catch(() => {}); },
       )
       .subscribe();
 
+    const pollMs = tableName === "attendance" || tableName === "visitors" ? 3000 : 12000;
+    const pollId = setInterval(() => {
+      if (document.visibilityState === "hidden") return;
+      pull().catch(() => {});
+    }, pollMs);
+
     return () => {
+      clearInterval(pollId);
       supabase.removeChannel(channel);
     };
-  }, [hydrated, ownerId, tableName, fromDbRow]);
+  }, [hydrated, ownerId, tableName, applyServerSnapshot]);
 
   return [rows, setRowsUser, syncStatus];
 }

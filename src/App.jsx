@@ -70,7 +70,7 @@ export default function TLOBApp() {
     if (attendance.length === 0 || events.length === 0) return;
     
     const validEventIds = new Set(events.map(e => e.id));
-    const orphaned = attendance.filter(a => !validEventIds.has(a.eventId));
+    const orphaned = attendance.filter(a => a.eventId && !validEventIds.has(a.eventId));
     
     if (orphaned.length > 0) {
       // Silently remove orphaned records
