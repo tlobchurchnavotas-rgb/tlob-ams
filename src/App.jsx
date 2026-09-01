@@ -483,7 +483,7 @@ export default function TLOBApp() {
             ? <MemberProfile member={profileMember} members={members} attendance={attendance} events={events} theme={theme} onClose={() => setProfileMember(null)} showNotif={showNotif} />
             : activeView === "dashboard" ? <DashboardView members={members} events={events} attendance={attendance} theme={theme} />
             : activeView === "members" ? <MembersView members={members} setMembers={setMembers} events={events} theme={theme} showNotif={showNotif} currentUser={currentUser} onViewProfile={setProfileMember} />
-            : activeView === "events" ? <EventsView events={events} setEvents={setEvents} attendance={attendance} setAttendance={setAttendance} members={members} theme={theme} showNotif={showNotif} currentUser={currentUser} completionPin={completionPin} />
+            : activeView === "events" ? <EventsView events={events} setEvents={setEvents} attendance={attendance} setAttendance={setAttendance} members={members} visitors={visitors} theme={theme} showNotif={showNotif} currentUser={currentUser} completionPin={completionPin} />
             : activeView === "scanner" ? <ScannerView members={members} events={events} attendance={attendance} setAttendance={setAttendance} theme={theme} showNotif={showNotif} currentUser={currentUser} onLaunchKiosk={async (evId) => {
               // Best-effort: request fullscreen on the user gesture that launches kiosk mode.
               try { await document.documentElement.requestFullscreen?.(); } catch {}

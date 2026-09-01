@@ -6,7 +6,7 @@ import { recordAuditLog } from "../auditLogs.js";
 
 
 // ─── EVENTS VIEW ──────────────────────────────────────────────────────────────
-function EventsView({ events, setEvents, attendance, setAttendance, members, theme, showNotif, currentUser, completionPin }) {
+function EventsView({ events, setEvents, attendance, setAttendance, members, visitors = [], theme, showNotif, currentUser, completionPin }) {
   const [showModal, setShowModal] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [showEditTemplate, setShowEditTemplate] = useState(false);
@@ -19,6 +19,7 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, the
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
   const [selectedEventForAttendance, setSelectedEventForAttendance] = useState(null);
   const [attendanceSearchQuery, setAttendanceSearchQuery] = useState("");
+  const [attendanceListTab, setAttendanceListTab] = useState("members");
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [templateToDelete, setTemplateToDelete] = useState(null);
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
@@ -269,6 +270,17 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, the
       {ev.status === "Completed" && (
         <div style={{ fontSize: 12, color: theme.success, marginTop: 6, fontWeight: 500, display: "flex", alignItems: "center", gap: 5 }}>
           <Icon name="check" size={14} /> {getAttendanceCount(ev.id)} attendance
+          {(() => {
+            const recs = getAttendanceRecords(ev.id);
+            const visitorsPresent = recs.filter(r => r.kind === "visitor").length;
+            const membersPresent = recs.filter(r => r.kind === "member").length;
+            if (!visitorsPresent) return null;
+            return (
+              <span style={{ color: theme.textMuted, fontWeight: 400 }}>
+                ({membersPresent} members • {visitorsPresent} visitors)
+              </span>
+            );
+          })()}
         </div>
       )}
       {canManageChurchData(currentUser.role) && (
@@ -489,25 +501,39 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, the
   };
 
   const getAttendanceRecords = (eventId) => {
-    // Validation filter: only include records with valid eventId and memberId
     const validMemberIds = new Set(members.map(m => m.id));
-    const eventAttendance = attendance.filter(a => 
-      a.eventId === eventId && validMemberIds.has(a.memberId)
-    );
-    return eventAttendance.map(record => {
-      const member = members.find(m => m.id === record.memberId);
-      return {
-        ...record,
-        memberName: member?.name || "Unknown",
-        memberMinistriy: member?.ministry || "—",
-        memberAgeGroup: member?.ageGroup || "—",
-      };
-    });
+    const visitorById = new Map((visitors || []).map(v => [v.id, v]));
+    return attendance
+      .filter(a => a.eventId === eventId)
+      .map(record => {
+        const isMember = validMemberIds.has(record.memberId);
+        if (isMember) {
+          const member = members.find(m => m.id === record.memberId);
+          return {
+            ...record,
+            kind: "member",
+            memberName: member?.name || record.memberName || "Unknown",
+            memberMinistriy: member?.ministry || "—",
+            memberAgeGroup: member?.ageGroup || "—",
+            contact: member?.contact || "—",
+          };
+        }
+        const visitor = visitorById.get(record.visitorId);
+        return {
+          ...record,
+          kind: "visitor",
+          memberName: visitor?.name || record.memberName || "Unknown",
+          memberMinistriy: "Visitor",
+          memberAgeGroup: "Visitor",
+          contact: visitor?.contact || "—",
+        };
+      });
   };
 
   const openAttendanceModal = (event) => {
     setSelectedEventForAttendance(event);
     setAttendanceSearchQuery("");
+    setAttendanceListTab("members");
     setShowAttendanceModal(true);
   };
 
@@ -530,16 +556,19 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, the
     } catch {}
   };
 
-  const getFilteredAttendanceRecords = (eventId, searchTerm) => {
-    const records = getAttendanceRecords(eventId);
+  const getFilteredAttendanceRecords = (eventId, searchTerm, kind) => {
+    const recordKind = kind === "visitors" || kind === "visitor" ? "visitor" : "member";
+    const records = getAttendanceRecords(eventId).filter(record => record.kind === recordKind);
     if (!searchTerm.trim()) return records;
+    const q = searchTerm.toLowerCase();
     return records.filter(record =>
-      record.memberName.toLowerCase().includes(searchTerm.toLowerCase())
+      record.memberName.toLowerCase().includes(q)
+      || String(record.contact || "").toLowerCase().includes(q)
     );
   };
 
   const getAttendanceStatsByAgeGroup = (eventId) => {
-    const records = getAttendanceRecords(eventId);
+    const records = getAttendanceRecords(eventId).filter(record => record.kind === "member");
     const stats = {};
     records.forEach(record => {
       const ageGroup = record.memberAgeGroup || "—";
@@ -551,6 +580,16 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, the
       return a[0].localeCompare(b[0]);
     });
   };
+
+  const selectedAttendanceRecords = selectedEventForAttendance
+    ? getAttendanceRecords(selectedEventForAttendance.id)
+    : [];
+  const selectedMemberCount = selectedAttendanceRecords.filter(r => r.kind === "member").length;
+  const selectedVisitorCount = selectedAttendanceRecords.filter(r => r.kind === "visitor").length;
+  const filteredAttendanceRows = selectedEventForAttendance
+    ? getFilteredAttendanceRecords(selectedEventForAttendance.id, attendanceSearchQuery, attendanceListTab)
+    : [];
+  const showingVisitors = attendanceListTab === "visitors";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
@@ -735,16 +774,49 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, the
             )}
 
             {/* Stats Section */}
-            <div style={{ background: theme.surface2, border: `1px solid ${theme.border}`, borderRadius: 10, padding: "10px 12px", marginBottom: 22, display: "flex", gap: 0, flexWrap: "wrap" }}>
-              <div style={{ flex: 1, minWidth: 100, padding: "0 10px", borderRight: `1px solid ${theme.border}` }}>
-                <div style={{ fontSize: 14, color: theme.textMuted, textTransform: "uppercase", fontWeight: 1000, letterSpacing: "0.5px" }}>Total</div>
-                <div style={{ fontSize: 18, fontWeight: 700, color: theme.accent, marginTop: 3 }}>{getAttendanceRecords(selectedEventForAttendance.id).length}</div>
+            <div style={{ background: theme.surface2, border: `1px solid ${theme.border}`, borderRadius: 10, padding: "10px 12px", marginBottom: 16, display: "flex", gap: 0, flexWrap: "wrap" }}>
+              <div style={{ flex: 1, minWidth: 90, padding: "0 10px", borderRight: `1px solid ${theme.border}` }}>
+                <div style={{ fontSize: 11, color: theme.textMuted, textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.5px" }}>Total</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: theme.accent, marginTop: 3 }}>{selectedAttendanceRecords.length}</div>
+              </div>
+              <div style={{ flex: 1, minWidth: 90, padding: "0 10px", borderRight: `1px solid ${theme.border}` }}>
+                <div style={{ fontSize: 11, color: theme.textMuted, textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.5px" }}>Members</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: theme.accent2, marginTop: 3 }}>{selectedMemberCount}</div>
+              </div>
+              <div style={{ flex: 1, minWidth: 90, padding: "0 10px", borderRight: `1px solid ${theme.border}` }}>
+                <div style={{ fontSize: 11, color: theme.textMuted, textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.5px" }}>Visitors</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: theme.accent2, marginTop: 3 }}>{selectedVisitorCount}</div>
               </div>
               {getAttendanceStatsByAgeGroup(selectedEventForAttendance.id).map(([ageGroup, count], idx, arr) => (
-                <div key={ageGroup} style={{ flex: 1, minWidth: 100, padding: "0 10px", borderRight: idx === arr.length - 1 ? "none" : `1px solid ${theme.border}` }}>
+                <div key={ageGroup} style={{ flex: 1, minWidth: 90, padding: "0 10px", borderRight: idx === arr.length - 1 ? "none" : `1px solid ${theme.border}` }}>
                   <div style={{ fontSize: 10, color: theme.textMuted, textTransform: "uppercase", fontWeight: 600, letterSpacing: "0.5px" }}>{ageGroup}</div>
                   <div style={{ fontSize: 16, fontWeight: 700, color: theme.accent2, marginTop: 3 }}>{count}</div>
                 </div>
+              ))}
+            </div>
+
+            <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+              {[
+                { id: "members", label: `Members (${selectedMemberCount})` },
+                { id: "visitors", label: `Visitors (${selectedVisitorCount})` },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className="btn"
+                  onClick={() => { setAttendanceListTab(tab.id); setAttendanceSearchQuery(""); }}
+                  style={{
+                    padding: "7px 14px",
+                    borderRadius: 8,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    border: `1px solid ${attendanceListTab === tab.id ? theme.accent : theme.border}`,
+                    background: attendanceListTab === tab.id ? `${theme.accent}18` : theme.surface2,
+                    color: attendanceListTab === tab.id ? theme.accent : theme.textMuted,
+                  }}
+                >
+                  {tab.label}
+                </button>
               ))}
             </div>
 
@@ -753,7 +825,7 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, the
               <div style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: theme.textMuted, pointerEvents: "none" }}><Icon name="search" size={15} /></div>
               <input
                 type="text"
-                placeholder="Search attendee..."
+                placeholder={showingVisitors ? "Search visitor..." : "Search attendee..."}
                 value={attendanceSearchQuery}
                 onChange={e => setAttendanceSearchQuery(e.target.value)}
                 style={{ width: "100%", paddingLeft: 38 }}
@@ -766,19 +838,19 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, the
                 <thead>
                   <tr style={{ borderBottom: `1px solid ${theme.border}` }}>
                     <th style={{ padding: "12px 0", textAlign: "left", color: theme.textMuted, fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>#</th>
-                    <th style={{ padding: "12px 8px", textAlign: "left", color: theme.textMuted, fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>Member</th>
-                    <th style={{ padding: "12px 8px", textAlign: "left", color: theme.textMuted, fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>Ministry</th>
+                    <th style={{ padding: "12px 8px", textAlign: "left", color: theme.textMuted, fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>{showingVisitors ? "Visitor" : "Member"}</th>
+                    <th style={{ padding: "12px 8px", textAlign: "left", color: theme.textMuted, fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>{showingVisitors ? "Contact" : "Ministry"}</th>
                     <th style={{ padding: "12px 8px", textAlign: "left", color: theme.textMuted, fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>Check-in</th>
                     <th style={{ padding: "12px 8px", textAlign: "left", color: theme.textMuted, fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>Status</th>
                     {canManageChurchData(currentUser.role) && <th style={{ padding: "12px 8px", textAlign: "center", color: theme.textMuted, fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>Action</th>}
                   </tr>
                 </thead>
                 <tbody>
-                  {getFilteredAttendanceRecords(selectedEventForAttendance.id, attendanceSearchQuery).map((record, idx) => (
+                  {filteredAttendanceRows.map((record, idx) => (
                     <tr key={record.id} style={{ borderBottom: `1px solid ${theme.border}` }}>
                       <td style={{ padding: "12px 0", color: theme.textMuted }}>{idx + 1}</td>
                       <td style={{ padding: "12px 8px", fontWeight: 500, color: theme.text }}>{record.memberName}</td>
-                      <td style={{ padding: "12px 8px", color: theme.textMuted, fontSize: 12 }}>{record.memberMinistriy}</td>
+                      <td style={{ padding: "12px 8px", color: theme.textMuted, fontSize: 12 }}>{showingVisitors ? (record.contact || "—") : record.memberMinistriy}</td>
                       <td style={{ padding: "12px 8px", color: theme.success, fontWeight: 500 }}>{record.timestamp ? new Date(record.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}</td>
                       <td style={{ padding: "12px 8px" }}><span style={{ background: `${theme.success}18`, color: theme.success, padding: "4px 8px", borderRadius: 6, fontSize: 11, fontWeight: 500 }}>Present</span></td>
                       {canManageChurchData(currentUser.role) && (
@@ -805,8 +877,10 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, the
                   ))}
                 </tbody>
               </table>
-              {getFilteredAttendanceRecords(selectedEventForAttendance.id, attendanceSearchQuery).length === 0 && (
-                <div style={{ padding: 20, textAlign: "center", color: theme.textMuted }}>No attendance records found</div>
+              {filteredAttendanceRows.length === 0 && (
+                <div style={{ padding: 20, textAlign: "center", color: theme.textMuted }}>
+                  {showingVisitors ? "No visitor attendance records found" : "No attendance records found"}
+                </div>
               )}
             </div>
           </div>
