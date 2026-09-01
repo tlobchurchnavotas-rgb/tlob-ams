@@ -40,6 +40,7 @@ export default function App() {
   const [memberQuery, setMemberQuery] = useState("");
   const [memberHits, setMemberHits] = useState([]);
   const [searching, setSearching] = useState(false);
+  const [consentChecked, setConsentChecked] = useState(false);
   const searchTimer = useRef(null);
 
   useEffect(() => {
@@ -113,6 +114,10 @@ export default function App() {
       setFormError("Please select an event.");
       return;
     }
+    if (!consentChecked) {
+      setFormError("Please confirm you agree to the data privacy notice.");
+      return;
+    }
     setSubmitting(true);
     try {
       const data = await submitPublicVisitor({
@@ -176,6 +181,7 @@ export default function App() {
               type="button"
               onClick={() => {
                 setResult(null);
+                setConsentChecked(false);
                 setForm((f) => ({ ...f, name: "", contact: "", invitedBy: "", invitedByName: "", notes: "", website: "" }));
                 setMemberQuery("");
               }}
@@ -277,10 +283,25 @@ export default function App() {
                   <label htmlFor="reg-website">Website</label>
                   <input id="reg-website" tabIndex={-1} autoComplete="off" value={form.website} onChange={(e) => setForm((f) => ({ ...f, website: e.target.value }))} />
                 </div>
+                <div style={{ padding: "12px 12px 10px", borderRadius: 10, background: C.surface2, border: `1px solid ${C.border}` }}>
+                  <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, margin: 0 }}>
+                    By checking in, you allow The Lord Our Banner Christian Church to collect and use your name and contact details to record your visit and attendance, in accordance with the Data Privacy Act of 2012 (Republic Act No. 10173).
+                  </p>
+                  <label htmlFor="reg-consent" style={{ display: "flex", alignItems: "flex-start", gap: 10, marginTop: 10, marginBottom: 0, textTransform: "none", letterSpacing: 0, fontSize: 13, fontWeight: 600, color: C.text, cursor: "pointer", lineHeight: 1.45 }}>
+                    <input
+                      id="reg-consent"
+                      type="checkbox"
+                      checked={consentChecked}
+                      onChange={(e) => setConsentChecked(e.target.checked)}
+                      style={{ marginTop: 3, width: 16, height: 16, flexShrink: 0, accentColor: C.accent, cursor: "pointer" }}
+                    />
+                    <span>I agree that the church may collect and use my information for this visit.</span>
+                  </label>
+                </div>
                 {formError && <div style={{ fontSize: 13, color: C.danger }}>{formError}</div>}
                 <button
                   type="submit"
-                  disabled={submitting || !form.name.trim() || !form.eventId}
+                  disabled={submitting || !form.name.trim() || !form.eventId || !consentChecked}
                   style={{
                     marginTop: 4,
                     width: "100%",
@@ -293,7 +314,7 @@ export default function App() {
                     fontSize: 15,
                     cursor: submitting ? "wait" : "pointer",
                     fontFamily: "inherit",
-                    opacity: form.name.trim() && form.eventId ? 1 : 0.5,
+                    opacity: form.name.trim() && form.eventId && consentChecked ? 1 : 0.5,
                   }}
                 >
                   {submitting ? "Saving…" : "Save & Check In"}
