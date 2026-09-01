@@ -195,7 +195,7 @@ export default function App() {
             <div>
               <div style={{ fontSize: 18, fontWeight: 800 }}>Welcome, guest</div>
               <div style={{ marginTop: 4, fontSize: 12, color: C.muted, lineHeight: 1.45 }}>
-                Fill this in to log your visit and record attendance. A Member ID can be assigned later by church staff.
+                Fill this in to log your visit and record attendance.
               </div>
             </div>
 
