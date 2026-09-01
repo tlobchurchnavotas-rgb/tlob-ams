@@ -194,7 +194,7 @@ export default function App() {
           <form onSubmit={onSubmit} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 22, boxShadow: "0 10px 28px rgba(26,35,64,.08)", display: "flex", flexDirection: "column", gap: 14, position: "relative" }}>
             <div>
               <div style={{ fontSize: 18, fontWeight: 800 }}>Welcome, guest</div>
-              <div style={{ marginTop: 4, fontSize: 13, color: C.muted, lineHeight: 1.45 }}>
+              <div style={{ marginTop: 4, fontSize: 10, color: C.muted, lineHeight: 1.45 }}>
                 Fill this in to log your visit and record attendance.
               </div>
             </div>
