@@ -1,4 +1,9 @@
 import { toDataURL } from "qrcode";
+import html2canvas from "html2canvas";
+
+function escapeHtml(value) {
+  return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
 
 export async function fetchAsDataUrl(src) {
   const response = await fetch(src);
@@ -21,174 +26,53 @@ export function jpegDataUrlToBlob(dataUrl) {
 }
 
 export function downloadJpegDataUrl(dataUrl, filename) {
-  const blob = jpegDataUrlToBlob(dataUrl);
-  const objectUrl = URL.createObjectURL(blob);
   const link = document.createElement("a");
-  link.href = objectUrl;
+  link.href = dataUrl;
   link.download = filename;
-  link.type = "image/jpeg";
   document.body.appendChild(link);
   link.click();
   link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 20000);
 }
 
-function loadImage(src) {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error("Could not load card image."));
-    image.src = src;
-  });
-}
-
-function roundRect(ctx, x, y, w, h, r) {
-  const radius = Math.min(r, w / 2, h / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + radius, y);
-  ctx.arcTo(x + w, y, x + w, y + h, radius);
-  ctx.arcTo(x + w, y + h, x, y + h, radius);
-  ctx.arcTo(x, y + h, x, y, radius);
-  ctx.arcTo(x, y, x + w, y, radius);
-  ctx.closePath();
-}
-
-function drawBadge(ctx, text, x, y, bg, fg, border) {
-  ctx.font = "600 16px Inter, system-ui, sans-serif";
-  const padX = 8;
-  const w = Math.ceil(ctx.measureText(text).width) + padX * 2;
-  const h = 22;
-  roundRect(ctx, x, y, w, h, 4);
-  ctx.fillStyle = bg;
-  ctx.fill();
-  ctx.strokeStyle = border;
-  ctx.lineWidth = 1;
-  ctx.stroke();
-  ctx.fillStyle = fg;
-  ctx.textBaseline = "middle";
-  ctx.textAlign = "left";
-  ctx.fillText(text, x + padX, y + h / 2 + 0.5);
-  return w;
-}
-
-// Same 250x310 MembersView card, painted to JPEG so phones cannot save "QR only".
+// Identical to AMS `src/utils/qr.js` getQRCardJpgDataUrl (MembersView Download JPG).
 export async function getQRCardJpgDataUrl(member, logoSrc) {
-  const scale = 2;
-  const width = 250 * scale;
-  const height = 310 * scale;
   const qrDataUrl = await toDataURL(`TLOB:${member.id}:${member.name}`, {
     width: 360,
     margin: 1,
     color: { dark: "#1a1a2e", light: "#ffffff" },
   });
-  const [qrImage, logoImage] = await Promise.all([
-    loadImage(qrDataUrl),
-    logoSrc ? loadImage(logoSrc).catch(() => null) : Promise.resolve(null),
-  ]);
-
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = "high";
-
-  ctx.fillStyle = "#ffffff";
-  roundRect(ctx, 0, 0, width, height, 16);
-  ctx.fill();
-  ctx.lineWidth = 10;
-  ctx.strokeStyle = "#000000";
-  roundRect(ctx, 5, 5, width - 10, height - 10, 12);
-  ctx.stroke();
-
-  const pad = 16;
-  const innerX = pad;
-  const innerW = width - pad * 2;
-
-  roundRect(ctx, innerX, pad, innerW, 48, 10);
-  ctx.fillStyle = "#1e293b";
-  ctx.fill();
-  ctx.strokeStyle = "#0f172a";
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  if (logoImage) {
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(innerX + 28, pad + 24, 18, 0, Math.PI * 2);
-    ctx.closePath();
-    ctx.clip();
-    ctx.drawImage(logoImage, innerX + 10, pad + 6, 36, 36);
-    ctx.restore();
-    ctx.beginPath();
-    ctx.arc(innerX + 28, pad + 24, 18, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(255,255,255,0.3)";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-  }
-
-  ctx.fillStyle = "#ffffff";
-  ctx.textAlign = "left";
-  ctx.textBaseline = "top";
-  ctx.font = "700 20px Inter, system-ui, sans-serif";
-  ctx.fillText("TLOB", innerX + 54, pad + 8);
-  ctx.font = "700 18px Inter, system-ui, sans-serif";
-  ctx.fillText("Member ID", innerX + 54, pad + 28);
-
-  const boxY = pad + 60;
-  const boxH = 350;
-  roundRect(ctx, innerX, boxY, innerW, boxH, 12);
-  ctx.fillStyle = "#f9fafb";
-  ctx.fill();
-  ctx.strokeStyle = "#144dbe";
-  ctx.lineWidth = 3;
-  ctx.stroke();
-  const qrSize = 330;
-  ctx.drawImage(qrImage, innerX + (innerW - qrSize) / 2, boxY + (boxH - qrSize) / 2, qrSize, qrSize);
-
-  ctx.fillStyle = "#000000";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "top";
-  ctx.font = "700 26px Inter, system-ui, sans-serif";
-  const nameY = boxY + boxH + 10;
-  ctx.fillText(String(member.name || ""), width / 2, nameY, innerW);
-
-  const badgeY = nameY + 34;
-  ctx.font = "600 16px Inter, system-ui, sans-serif";
-  const idText = String(member.id || "");
-  const statusText = `  ${member.status || "Active"}`;
-  const idW = Math.ceil(ctx.measureText(idText).width) + 16;
-  const statusW = Math.ceil(ctx.measureText(statusText).width) + 28;
-  const totalW = idW + 8 + statusW;
-  let badgeX = (width - totalW) / 2;
-  badgeX += drawBadge(ctx, idText, badgeX, badgeY, "#f3f4f6", "#374151", "#d1d5db") + 8;
-  roundRect(ctx, badgeX, badgeY, statusW, 22, 4);
-  ctx.fillStyle = "#e0f2fe";
-  ctx.fill();
-  ctx.strokeStyle = "#06b6d4";
-  ctx.lineWidth = 1;
-  ctx.stroke();
-  ctx.fillStyle = "#10b981";
-  ctx.beginPath();
-  ctx.arc(badgeX + 10, badgeY + 11, 3, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = "#0369a1";
-  ctx.font = "600 16px Inter, system-ui, sans-serif";
-  ctx.textAlign = "left";
-  ctx.textBaseline = "middle";
-  ctx.fillText(String(member.status || "Active"), badgeX + 18, badgeY + 12);
-
-  ctx.strokeStyle = "#5d5f64";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(innerX, height - 42);
-  ctx.lineTo(innerX + innerW, height - 42);
-  ctx.stroke();
-  ctx.fillStyle = "#666666";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "top";
-  ctx.font = "600 14px Inter, system-ui, sans-serif";
-  ctx.fillText("Gamitin sa iyong weekly attendance. Huwag iwawala.", width / 2, height - 34, innerW);
-
-  return canvas.toDataURL("image/jpeg", 0.95);
+  const card = document.createElement("div");
+  card.style.cssText = "width:250px;height:310px;border:5px solid #000;border-radius:8px;padding:8px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;background:#fff;gap:0;font-family:Inter,system-ui,sans-serif;box-sizing:border-box;position:fixed;left:-10000px;top:0;color-scheme:only light;";
+  card.innerHTML = `
+    <div style="display:flex;align-items:center;gap:6px;width:100%;background:#1e293b;color:#fff;padding:3px 6px;border-radius:5px;border:1px solid #0f172a;flex-shrink:0;box-sizing:border-box;">
+      <img src="${logoSrc}" style="width:18px;height:18px;border-radius:50%;border:1px solid rgba(255,255,255,.3);object-fit:cover;flex-shrink:0;">
+      <div style="font-size:10px;font-weight:700;line-height:1.1;flex:1;">TLOB<br>Member ID</div>
+    </div>
+    <div style="padding:4px;border:1.5px solid #144dbe;border-radius:6px;background:#f9fafb;display:flex;align-items:center;justify-content:center;flex:1;margin-top:6px;margin-bottom:6px;box-sizing:border-box;">
+      <img src="${qrDataUrl}" style="width:180px;height:175px;display:block;">
+    </div>
+    <div style="font-weight:700;font-size:13px;text-align:center;color:#000;max-width:100%;line-height:1.1;margin:0 0 3px;">${escapeHtml(member.name || "")}</div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:6px;width:100%;flex:0;justify-content:flex-start;">
+      <div style="display:flex;align-items:center;justify-content:center;gap:2px;width:100%;">
+        <span style="padding:0 2px;border-radius:2px;background:#f3f4f6;color:#374151;border:.5px solid #d1d5db;white-space:nowrap;font-size:8px;">${escapeHtml(member.id)}</span>
+        <span style="padding:0 4px;border-radius:2px;background:#e0f2fe;color:#0369a1;border:.5px solid #06b6d4;white-space:nowrap;font-weight:600;font-size:8px;min-height:14px;"><span style="display:inline-flex;width:3px;height:3px;border-radius:50%;margin-right:2px;vertical-align:middle;background:${member.status === "Active" ? "#10b981" : "#ef4444"};"></span>${escapeHtml(member.status || "Active")}</span>
+      </div>
+      <div style="width:100%;text-align:center;font-size:8px;font-weight:600;color:#666;border-top:1px solid #5d5f64;padding-top:3px;margin-top:3px;box-sizing:border-box;">Gamitin sa iyong weekly attendance. Huwag iwawala.</div>
+    </div>`;
+  document.body.appendChild(card);
+  await Promise.all(Array.from(card.querySelectorAll("img")).map((image) => (
+    image.complete ? Promise.resolve() : new Promise((resolve) => {
+      image.onload = resolve;
+      image.onerror = resolve;
+    })
+  )));
+  const rendered = await html2canvas(card, {
+    width: 250,
+    height: 310,
+    scale: 2,
+    backgroundColor: "#ffffff",
+    useCORS: true,
+  });
+  card.remove();
+  return rendered.toDataURL("image/jpeg", 0.95);
 }

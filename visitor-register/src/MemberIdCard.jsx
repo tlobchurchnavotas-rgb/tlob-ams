@@ -180,7 +180,9 @@ export default function MemberIdCard({ claim }) {
             <img
               src={savePreview}
               alt="TLOB member ID card"
-              style={{ width: 250, maxWidth: "100%", height: "auto", marginTop: 14, border: "1px solid #dde3f0", background: "#fff" }}
+              width={250}
+              height={310}
+              style={{ width: 250, height: 310, maxWidth: "100%", objectFit: "contain", marginTop: 14, background: "#fff" }}
             />
             <a
               href={savePreview}
