@@ -169,9 +169,10 @@ export default function App() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'DM Sans','Segoe UI',sans-serif", padding: "28px 16px 48px" }}>
+    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'DM Sans','Segoe UI',sans-serif", padding: "28px 16px 48px", colorScheme: "only light" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@500&display=swap');
+        :root, html, body { color-scheme: only light; background: ${C.bg}; }
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@500&family=Inter:wght@400;600;700&display=swap');
         *{box-sizing:border-box;margin:0;padding:0;}
         label{display:block;font-size:11px;font-weight:700;color:${C.muted};margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;}
       `}</style>
