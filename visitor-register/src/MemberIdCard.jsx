@@ -112,7 +112,7 @@ export default function MemberIdCard({ claim }) {
             <img src={logoSrc} alt="" style={{ width: 18, height: 18, borderRadius: "50%", border: "1px solid rgba(255,255,255,.3)", objectFit: "cover", flexShrink: 0 }} />
             <div style={{ fontSize: 10, fontWeight: 700, lineHeight: 1.1, flex: 1, textAlign: "left", color: "#fff" }}>TLOB<br />Member ID</div>
           </div>
-          <div style={{ padding: 4, border: "1.5px solid #144dbe", borderRadius: 6, background: "#f9fafb", display: "flex", alignItems: "center", justifyContent: "center", flex: 1, marginTop: 6, marginBottom: 6, boxSizing: "border-box", width: "100%" }}>
+          <div style={{ padding: 4, border: "1.5px solid #144dbe", borderRadius: 6, background: "#f9fafb", display: "flex", alignItems: "center", justifyContent: "center", flex: 1, marginTop: 6, marginBottom: 6, boxSizing: "border-box", alignSelf: "center", width: "auto" }}>
             {qrSrc ? <img src={qrSrc} alt="" draggable="false" style={{ width: 180, height: 175, display: "block", pointerEvents: "none", WebkitTouchCallout: "none", userSelect: "none" }} /> : <div style={{ width: 180, height: 175 }} />}
           </div>
           <div style={{ fontWeight: 700, fontSize: 13, textAlign: "center", color: "#000", fontFamily: "Inter, system-ui, sans-serif", maxWidth: "100%", lineHeight: 1.1, margin: "0 0 3px" }}>{claim.name}</div>
