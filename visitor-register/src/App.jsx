@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toDataURL } from "qrcode";
 import { fetchPublicEvents, searchPublicMembers, submitPublicVisitor } from "./api.js";
-import { claimFromLocation, memberQrPayload } from "./claim.js";
+import { claimFromLocation } from "./claim.js";
+import MemberIdCard from "./MemberIdCard.jsx";
 
 const C = {
   bg: "#f0f4ff",
@@ -35,54 +36,6 @@ function VisitorIdQr({ visitorId }) {
   }, [visitorId]);
   if (!src) return null;
   return <img src={src} width={160} height={160} alt="Visitor QR" />;
-}
-
-function VirtualMemberCard({ claim }) {
-  const [qrSrc, setQrSrc] = useState("");
-  const [downloadError, setDownloadError] = useState("");
-  const payload = memberQrPayload(claim.memberId, claim.name);
-
-  useEffect(() => {
-    document.title = "Virtual Member ID · TLOB";
-    let cancelled = false;
-    toDataURL(payload, { width: 480, margin: 1, color: { dark: "#1a1a2e", light: "#ffffff" } })
-      .then((url) => { if (!cancelled) setQrSrc(url); })
-      .catch(() => { if (!cancelled) setDownloadError("Could not generate QR code."); });
-    return () => { cancelled = true; };
-  }, [payload]);
-
-  const downloadPng = () => {
-    if (!qrSrc) return;
-    const link = document.createElement("a");
-    link.href = qrSrc;
-    link.download = `TLOB-${claim.memberId}-virtual-id.png`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-  };
-
-  return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 24, textAlign: "center", boxShadow: "0 10px 28px rgba(26,35,64,.08)" }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, letterSpacing: ".08em" }}>VIRTUAL MEMBER ID</div>
-      <div style={{ marginTop: 8, fontSize: 22, fontWeight: 800 }}>{claim.name}</div>
-      <div style={{ marginTop: 6, fontFamily: "'DM Mono', monospace", fontSize: 28, fontWeight: 700, letterSpacing: ".08em" }}>{claim.memberId}</div>
-      <div style={{ display: "inline-block", marginTop: 18, padding: 12, background: "#fff", borderRadius: 14, border: `1px solid ${C.border}` }}>
-        {qrSrc ? <img src={qrSrc} width={220} height={220} alt="Member QR" /> : <div style={{ width: 220, height: 220 }} />}
-      </div>
-      <div style={{ marginTop: 12, fontSize: 13, color: C.muted, lineHeight: 1.5 }}>
-        Download this QR and use it to log attendance at the kiosk.
-      </div>
-      {downloadError && <div style={{ marginTop: 8, fontSize: 13, color: C.danger }}>{downloadError}</div>}
-      <button
-        type="button"
-        onClick={downloadPng}
-        disabled={!qrSrc}
-        style={{ marginTop: 16, width: "100%", padding: "12px 16px", borderRadius: 10, border: "none", background: C.accent, color: "white", fontWeight: 800, fontSize: 15, cursor: qrSrc ? "pointer" : "wait", fontFamily: "inherit" }}
-      >
-        Download QR
-      </button>
-    </div>
-  );
 }
 
 export default function App() {
@@ -232,7 +185,7 @@ export default function App() {
         </div>
 
         {claim ? (
-          <VirtualMemberCard claim={claim} />
+          <MemberIdCard claim={claim} />
         ) : result ? (
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 24, textAlign: "center", boxShadow: "0 10px 28px rgba(26,35,64,.08)" }}>
             <div style={{ width: 58, height: 58, borderRadius: "50%", margin: "0 auto 14px", background: `${C.success}18`, color: C.success, display: "grid", placeItems: "center", fontSize: 28, fontWeight: 800 }}>✓</div>
