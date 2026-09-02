@@ -169,9 +169,9 @@ export default function App() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'DM Sans','Segoe UI',sans-serif", padding: "28px 16px 48px", colorScheme: "only light" }}>
+    <div style={{ minHeight: "100vh", background: claim ? "linear-gradient(180deg, #dbe7ff 0%, #f4f7ff 45%, #ffffff 100%)" : C.bg, color: C.text, fontFamily: "'DM Sans','Segoe UI',sans-serif", padding: "28px 16px 48px", colorScheme: "only light" }}>
       <style>{`
-        :root, html, body { color-scheme: only light; background: ${C.bg}; }
+        :root, html, body { color-scheme: only light; background: ${claim ? "#dbe7ff" : C.bg}; }
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@500&family=Inter:wght@400;600;700&display=swap');
         *{box-sizing:border-box;margin:0;padding:0;}
         label{display:block;font-size:11px;font-weight:700;color:${C.muted};margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;}
@@ -181,7 +181,7 @@ export default function App() {
           <img src="/logo.png" alt="TLOB" style={{ width: 52, height: 52, borderRadius: "50%", objectFit: "cover", border: `3px solid ${C.border}` }} />
           <div>
             <div style={{ fontWeight: 800, fontSize: 15, lineHeight: 1.2 }}>The Lord Our Banner</div>
-            <div style={{ fontSize: 12, color: C.muted }}>{claim ? "Virtual member ID" : "Visitor self-registration"}</div>
+            <div style={{ fontSize: 12, color: C.muted }}>{claim ? "Virtual Member Card" : "Visitor self-registration"}</div>
           </div>
         </div>
 
