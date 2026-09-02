@@ -41,6 +41,7 @@ export default function AdminSettingsView({ theme, showNotif, currentUser, setCu
   const fileInputRef = useRef(null);
   const [publicRegisterEnabled, setPublicRegisterEnabled] = usePersisted("public_register_enabled", true, userId);
   const [publicRegisterBaseUrl, setPublicRegisterBaseUrl] = usePersisted("public_register_base_url", "", userId);
+  const [autoConvertAfterVisits, setAutoConvertAfterVisits] = usePersisted("auto_convert_after_visits", 2, userId);
   const [registerEventId, setRegisterEventId] = useState("");
 
   const canUseDb = useMemo(() => Boolean(isSupabaseConfigured && supabase && userId), [userId]);
@@ -407,7 +408,7 @@ export default function AdminSettingsView({ theme, showNotif, currentUser, setCu
       <div className="card" style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, padding: 18 }}>
         <div style={{ fontSize: 14, fontWeight: 800, letterSpacing: "-.01em" }}>Public self-registration</div>
         <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 4, marginBottom: 14 }}>
-          Guests can log as visitors and check in from their phone. Staff convert them to members later from Visitors.
+          Guests can log as visitors and check in from their phone. After enough unique event visits, kiosk can convert them to members automatically. You can still convert anyone manually from Visitors.
         </div>
         <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", marginBottom: 14 }}>
           <input
@@ -417,6 +418,30 @@ export default function AdminSettingsView({ theme, showNotif, currentUser, setCu
           />
           <span style={{ fontSize: 13, fontWeight: 600, textTransform: "none", letterSpacing: 0, color: theme.text }}>Enable public registration link</span>
         </label>
+        <div style={{ marginBottom: 14 }}>
+          <label>Auto-convert after unique event visits</label>
+          <input
+            type="number"
+            min={0}
+            step={1}
+            value={autoConvertAfterVisits ?? 2}
+            onChange={(e) => {
+              const raw = e.target.value;
+              if (raw === "") {
+                setAutoConvertAfterVisits("");
+                return;
+              }
+              const n = Math.max(0, Math.floor(Number(raw) || 0));
+              setAutoConvertAfterVisits(n);
+            }}
+            onBlur={() => {
+              if (autoConvertAfterVisits === "" || autoConvertAfterVisits == null) setAutoConvertAfterVisits(2);
+            }}
+          />
+          <div style={{ marginTop: 6, fontSize: 12, color: theme.textMuted }}>
+            Default is 2 (first register + second event). Set to 0 to turn auto-convert off and convert only from Visitors.
+          </div>
+        </div>
         {publicRegisterEnabled && (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div>

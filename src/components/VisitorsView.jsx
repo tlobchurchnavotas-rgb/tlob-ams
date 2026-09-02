@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Icon } from "./Icon.jsx";
 import Avatar from "./Avatar.jsx";
 import { recordAuditLog } from "../auditLogs.js";
+import { convertVisitorToMember } from "../utils/convertVisitor.js";
 
 
 // ─── VISITORS VIEW ────────────────────────────────────────────────────────────
@@ -29,36 +30,17 @@ function VisitorsView({ visitors, setVisitors, members, setMembers, attendance, 
   };
 
   const handleConvert = async v => {
-    const ids = members.map(m => parseInt(m.id.slice(1))).filter(n => !isNaN(n));
-    const newId = `M${String(ids.length > 0 ? Math.max(...ids) + 1 : 1).padStart(3, "0")}`;
-    const member = {
-      id: newId,
-      name: v.name,
-      contact: v.contact,
-      ministry: "",
-      status: "Active",
-      joined: v.date,
-      sourceEventId: v.eventId || "",
-      photo: null,
-      archived: false,
-      birthday: "",
-      anniversary: "",
-    };
-    setMembers(prev => [...prev, member]);
-    setAttendance(prev => prev.map(record => record.visitorId === v.id
-      ? { ...record, memberId: newId, visitorId: null, memberName: member.name }
-      : record));
-    setVisitors(prev => prev.map(x => x.id === v.id ? { ...x, convertedToMember: true } : x));
-    showNotif(`${v.name} converted to member!`);
-    try {
-      await recordAuditLog({
-        actor: currentUser,
-        action: "visitor_converted_to_member",
-        target: newId,
-        source: "visitors",
-        metadata: { visitorId: v.id, memberId: newId, name: v.name },
-      });
-    } catch {}
+    const member = await convertVisitorToMember({
+      visitor: v,
+      members,
+      attendance,
+      setMembers,
+      setAttendance,
+      setVisitors,
+      actor: currentUser,
+      source: "visitors",
+    });
+    if (member) showNotif(`${v.name} converted to member!`);
   };
 
   const handleDelete = async id => {

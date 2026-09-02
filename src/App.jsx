@@ -293,6 +293,7 @@ export default function TLOBApp() {
       events={events}
       attendance={attendance}
       setAttendance={setAttendance}
+      setMembers={setMembers}
       setVisitors={setVisitors}
       setEvents={setEvents}
       currentUser={currentUser}

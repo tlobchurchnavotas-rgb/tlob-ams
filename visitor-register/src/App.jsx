@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { toDataURL } from "qrcode";
 import { fetchPublicEvents, searchPublicMembers, submitPublicVisitor } from "./api.js";
+import { claimFromLocation, memberQrPayload } from "./claim.js";
 
 const C = {
   bg: "#f0f4ff",
@@ -19,6 +21,68 @@ function eventFromQuery() {
   } catch {
     return "";
   }
+}
+
+function VisitorIdQr({ visitorId }) {
+  const [src, setSrc] = useState("");
+  useEffect(() => {
+    if (!visitorId) return undefined;
+    let cancelled = false;
+    toDataURL(visitorId, { width: 280, margin: 1, color: { dark: "#1a1a2e", light: "#ffffff" } })
+      .then((url) => { if (!cancelled) setSrc(url); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [visitorId]);
+  if (!src) return null;
+  return <img src={src} width={160} height={160} alt="Visitor QR" />;
+}
+
+function VirtualMemberCard({ claim }) {
+  const [qrSrc, setQrSrc] = useState("");
+  const [downloadError, setDownloadError] = useState("");
+  const payload = memberQrPayload(claim.memberId, claim.name);
+
+  useEffect(() => {
+    document.title = "Virtual Member ID · TLOB";
+    let cancelled = false;
+    toDataURL(payload, { width: 480, margin: 1, color: { dark: "#1a1a2e", light: "#ffffff" } })
+      .then((url) => { if (!cancelled) setQrSrc(url); })
+      .catch(() => { if (!cancelled) setDownloadError("Could not generate QR code."); });
+    return () => { cancelled = true; };
+  }, [payload]);
+
+  const downloadPng = () => {
+    if (!qrSrc) return;
+    const link = document.createElement("a");
+    link.href = qrSrc;
+    link.download = `TLOB-${claim.memberId}-virtual-id.png`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
+  return (
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 24, textAlign: "center", boxShadow: "0 10px 28px rgba(26,35,64,.08)" }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, letterSpacing: ".08em" }}>VIRTUAL MEMBER ID</div>
+      <div style={{ marginTop: 8, fontSize: 22, fontWeight: 800 }}>{claim.name}</div>
+      <div style={{ marginTop: 6, fontFamily: "'DM Mono', monospace", fontSize: 28, fontWeight: 700, letterSpacing: ".08em" }}>{claim.memberId}</div>
+      <div style={{ display: "inline-block", marginTop: 18, padding: 12, background: "#fff", borderRadius: 14, border: `1px solid ${C.border}` }}>
+        {qrSrc ? <img src={qrSrc} width={220} height={220} alt="Member QR" /> : <div style={{ width: 220, height: 220 }} />}
+      </div>
+      <div style={{ marginTop: 12, fontSize: 13, color: C.muted, lineHeight: 1.5 }}>
+        Download this QR and use it to log attendance at the kiosk.
+      </div>
+      {downloadError && <div style={{ marginTop: 8, fontSize: 13, color: C.danger }}>{downloadError}</div>}
+      <button
+        type="button"
+        onClick={downloadPng}
+        disabled={!qrSrc}
+        style={{ marginTop: 16, width: "100%", padding: "12px 16px", borderRadius: 10, border: "none", background: C.accent, color: "white", fontWeight: 800, fontSize: 15, cursor: qrSrc ? "pointer" : "wait", fontFamily: "inherit" }}
+      >
+        Download QR
+      </button>
+    </div>
+  );
 }
 
 export default function App() {
@@ -42,12 +106,14 @@ export default function App() {
   const [searching, setSearching] = useState(false);
   const [consentChecked, setConsentChecked] = useState(false);
   const searchTimer = useRef(null);
+  const claim = useMemo(() => claimFromLocation(), []);
 
   useEffect(() => {
-    document.title = "Visitor registration · TLOB";
-  }, []);
+    document.title = claim ? "Virtual Member ID · TLOB" : "Visitor registration · TLOB";
+  }, [claim]);
 
   useEffect(() => {
+    if (claim) return undefined;
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -73,10 +139,10 @@ export default function App() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [claim]);
 
   useEffect(() => {
-    if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (claim) return undefined;
     const q = memberQuery.trim();
     if (q.length < 3) {
       setMemberHits([]);
@@ -95,7 +161,7 @@ export default function App() {
       }
     }, 280);
     return () => { if (searchTimer.current) clearTimeout(searchTimer.current); };
-  }, [memberQuery]);
+  }, [memberQuery, claim]);
 
   const selectedEvent = useMemo(
     () => events.find((e) => e.id === form.eventId) || null,
@@ -161,11 +227,13 @@ export default function App() {
           <img src="/logo.png" alt="TLOB" style={{ width: 52, height: 52, borderRadius: "50%", objectFit: "cover", border: `3px solid ${C.border}` }} />
           <div>
             <div style={{ fontWeight: 800, fontSize: 15, lineHeight: 1.2 }}>The Lord Our Banner</div>
-            <div style={{ fontSize: 12, color: C.muted }}>Visitor self-registration</div>
+            <div style={{ fontSize: 12, color: C.muted }}>{claim ? "Virtual member ID" : "Visitor self-registration"}</div>
           </div>
         </div>
 
-        {result ? (
+        {claim ? (
+          <VirtualMemberCard claim={claim} />
+        ) : result ? (
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 24, textAlign: "center", boxShadow: "0 10px 28px rgba(26,35,64,.08)" }}>
             <div style={{ width: 58, height: 58, borderRadius: "50%", margin: "0 auto 14px", background: `${C.success}18`, color: C.success, display: "grid", placeItems: "center", fontSize: 28, fontWeight: 800 }}>✓</div>
             <div style={{ fontSize: 20, fontWeight: 800 }}>{result.duplicate ? "Already checked in" : "You're checked in"}</div>
@@ -175,8 +243,13 @@ export default function App() {
             <div style={{ marginTop: 18, padding: "14px 12px", borderRadius: 12, background: C.surface2, border: `1px solid ${C.border}` }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: ".08em" }}>YOUR VISITOR ID</div>
               <div style={{ marginTop: 4, fontFamily: "'DM Mono', monospace", fontSize: 28, fontWeight: 700, letterSpacing: ".08em" }}>{result.visitorId}</div>
+              {result.visitorId && (
+                <div style={{ display: "inline-block", marginTop: 12, padding: 8, background: "#fff", borderRadius: 12 }}>
+                  <VisitorIdQr visitorId={result.visitorId} />
+                </div>
+              )}
             </div>
-            <div style={{ marginTop: 12, fontSize: 12, color: C.muted }}>Show this ID at the door if asked. Staff can assign a Member ID later.</div>
+            <div style={{ marginTop: 12, fontSize: 12, color: C.muted }}>Save this QR and scan it at the kiosk next time you attend.</div>
             <button
               type="button"
               onClick={() => {

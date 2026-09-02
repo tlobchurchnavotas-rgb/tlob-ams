@@ -4,10 +4,17 @@ import Avatar from "./Avatar.jsx";
 import { CHURCH_LOGO_SRC, KIOSK_SLIDES, usePersisted } from "../constants.js";
 import { recordAuditLog } from "../auditLogs.js";
 import { QRCode } from "../utils/qr.js";
+import {
+  applyVisitorConversion,
+  buildClaimUrl,
+  memberQrPayload,
+  nextPrefixedId,
+  shouldAutoConvertVisitor,
+} from "../utils/convertVisitor.js";
 
 
 // ─── KIOSK MODE ───────────────────────────────────────────────────────────────
-function KioskView({ members, visitors, events, attendance, setAttendance, setVisitors, setEvents, currentUser, completionPin, theme, onExit, showNotif, initialEvent }) {
+function KioskView({ members, visitors, events, attendance, setAttendance, setMembers, setVisitors, setEvents, currentUser, completionPin, theme, onExit, showNotif, initialEvent }) {
   const [selEv, setSelEv] = useState(() => initialEvent || events.find(e => e.status === "Active")?.id || "");
   const [input, setInput] = useState("");
   const [scanStatus, setScanStatus] = useState(null); // null | {type,member}
@@ -34,9 +41,15 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setVi
   const attRef = useRef(attendance); useEffect(() => { attRef.current = attendance; }, [attendance]);
   const selEvRef = useRef(selEv); useEffect(() => { selEvRef.current = selEv; }, [selEv]);
   const setAttRef = useRef(setAttendance); useEffect(() => { setAttRef.current = setAttendance; }, [setAttendance]);
+  const setMembersRef = useRef(setMembers); useEffect(() => { setMembersRef.current = setMembers; }, [setMembers]);
+  const setVisitorsRef = useRef(setVisitors); useEffect(() => { setVisitorsRef.current = setVisitors; }, [setVisitors]);
   const statusRef = useRef(scanStatus); useEffect(() => { statusRef.current = scanStatus; }, [scanStatus]);
   const [publicRegisterEnabled] = usePersisted("public_register_enabled", true, currentUser?.id ?? null);
   const [publicRegisterBaseUrl] = usePersisted("public_register_base_url", "", currentUser?.id ?? null);
+  const [autoConvertAfterVisits] = usePersisted("auto_convert_after_visits", 2, currentUser?.id ?? null);
+  const autoConvertRef = useRef(autoConvertAfterVisits); useEffect(() => { autoConvertRef.current = autoConvertAfterVisits; }, [autoConvertAfterVisits]);
+  const registerBaseUrlRef = useRef(publicRegisterBaseUrl); useEffect(() => { registerBaseUrlRef.current = publicRegisterBaseUrl; }, [publicRegisterBaseUrl]);
+  const currentUserRef = useRef(currentUser); useEffect(() => { currentUserRef.current = currentUser; }, [currentUser]);
   const visitorRegisterUrl = useMemo(() => {
     const origin = String(publicRegisterBaseUrl || "").trim().replace(/\/$/, "");
     if (!origin || origin.startsWith("file:")) return "";
@@ -56,10 +69,58 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setVi
         || { name: record.memberName },
     })), [attendance, members, visitors, selEv]);
 
-  const nextId = (list, prefix) => {
-    const nums = list.map(x => parseInt(x.id.slice(prefix.length))).filter(n => !isNaN(n));
-    return `${prefix}${String(nums.length > 0 ? Math.max(...nums) + 1 : 1).padStart(3, "0")}`;
-  };
+  const nextId = (list, prefix) => nextPrefixedId(list, prefix);
+
+  const dismissHold = useCallback(() => {
+    setScanStatus(null);
+    setTimeout(() => inputRef.current?.focus(), 50);
+  }, []);
+
+  const applyConversion = useCallback(async (visitor, membersSnap, attendanceSnap) => {
+    const result = applyVisitorConversion(visitor, membersSnap, attendanceSnap);
+    if (!result || !setMembersRef.current || !setVisitorsRef.current) return null;
+    setMembersRef.current(result.members);
+    setAttRef.current(result.attendance);
+    setVisitorsRef.current((prev) => (prev || []).map((row) => (
+      row.id === visitor.id ? { ...row, convertedToMember: true } : row
+    )));
+    membersRef.current = result.members;
+    visitorsRef.current = (visitorsRef.current || []).map((row) => (
+      row.id === visitor.id ? { ...row, convertedToMember: true } : row
+    ));
+    attRef.current = result.attendance;
+    try {
+      await recordAuditLog({
+        actor: currentUserRef.current,
+        action: "visitor_converted_to_member",
+        target: result.member.id,
+        source: "kiosk",
+        metadata: { visitorId: visitor.id, memberId: result.member.id, name: visitor.name },
+      });
+    } catch {}
+    return result.member;
+  }, []);
+
+  const showMemberCard = useCallback((member) => {
+    const claimUrl = buildClaimUrl(registerBaseUrlRef.current, member);
+    const scanPayload = memberQrPayload(member);
+    setScanStatus({
+      type: "success",
+      hold: "member",
+      member,
+      claimUrl: String(claimUrl).startsWith("http") ? claimUrl : "",
+      scanPayload,
+    });
+  }, []);
+
+  const showVisitorCard = useCallback((visitor) => {
+    setScanStatus({
+      type: "success",
+      hold: "visitor",
+      member: visitor,
+      visitorId: visitor.id,
+    });
+  }, []);
 
   // Play voice feedback for scan results
   const playSound = useCallback((type) => {
@@ -100,8 +161,12 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setVi
       return;
     }
     const mems = membersRef.current, vsts = visitorsRef.current, att = attRef.current;
-    const member = mems.find(m => val === `TLOB:${m.id}:${m.name}`) || mems.find(m => m.id === val.toUpperCase()) || mems.find(m => val.toUpperCase().includes(m.id));
-    const visitor = vsts.find(v => v.id === val.toUpperCase()) || vsts.find(v => v.name.toLowerCase() === val.toLowerCase());
+    let member = mems.find(m => val === `TLOB:${m.id}:${m.name}`) || mems.find(m => m.id === val.toUpperCase()) || mems.find(m => val.toUpperCase().includes(m.id));
+    let visitor = vsts.find(v => v.id === val.toUpperCase()) || vsts.find(v => v.name.toLowerCase() === val.toLowerCase());
+    if (!member && visitor?.convertedToMember) {
+      member = mems.find(m => m.name === visitor.name) || null;
+      visitor = member ? null : visitor;
+    }
     if (!member && !visitor) {
       playSound("error");
       setScanStatus({ type: "error", member: { name: val } });
@@ -109,29 +174,62 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setVi
       setTimeout(() => { setScanStatus(null); inputRef.current?.focus(); }, 2500);
       return;
     }
-    const identity = member ? { memberId: member.id, visitorId: null, name: member.name, memberObj: member } : { memberId: null, visitorId: visitor.id, name: visitor.name, memberObj: visitor };
-    if (att.find(a => a.eventId === evId && (member ? a.memberId === member.id : a.visitorId === visitor.id))) { playSound("duplicate"); setScanStatus({ type: "duplicate", member: identity.memberObj }); setTimeout(() => { setScanStatus(null); inputRef.current?.focus(); }, 2500); return; }
-    const newRec = { id: nextId(att, "A"), memberId: identity.memberId, visitorId: identity.visitorId, eventId: evId, timestamp: new Date().toISOString(), memberName: identity.name };
-    setAttRef.current(prev => [...prev, newRec]);
-    playSound("success");
-    setScanStatus({ type: "success", member });
+    if (member) {
+      if (att.find(a => a.eventId === evId && a.memberId === member.id)) {
+        playSound("duplicate");
+        setScanStatus({ type: "duplicate", member });
+        setTimeout(() => { setScanStatus(null); inputRef.current?.focus(); }, 2500);
+        return;
+      }
+      const newRec = { id: nextId(att, "A"), memberId: member.id, visitorId: null, eventId: evId, timestamp: new Date().toISOString(), memberName: member.name };
+      setAttRef.current(prev => [...prev, newRec]);
+      attRef.current = [...att, newRec];
+      playSound("success");
+      setScanStatus({ type: "success", member });
+      setInput("");
+      setTimeout(() => { setScanStatus(null); inputRef.current?.focus(); }, 2800);
+      return;
+    }
+
+    if (att.find(a => a.eventId === evId && a.visitorId === visitor.id)) {
+      playSound("duplicate");
+      setScanStatus({ type: "duplicate", member: visitor });
+      setTimeout(() => { setScanStatus(null); inputRef.current?.focus(); }, 2500);
+      return;
+    }
+    const newRec = { id: nextId(att, "A"), memberId: null, visitorId: visitor.id, eventId: evId, timestamp: new Date().toISOString(), memberName: visitor.name };
+    const attendanceWithNew = [...att, newRec];
     setInput("");
-    setTimeout(() => { setScanStatus(null); inputRef.current?.focus(); }, 2800);
-  }, [events, playSound, showNotif]);
+    playSound("success");
+
+    if (shouldAutoConvertVisitor({ visitor, attendance: attendanceWithNew, threshold: autoConvertRef.current })) {
+      applyConversion(visitor, mems, attendanceWithNew).then((converted) => {
+        if (converted) showMemberCard(converted);
+        else {
+          setAttRef.current(attendanceWithNew);
+          attRef.current = attendanceWithNew;
+          showVisitorCard(visitor);
+        }
+      });
+      return;
+    }
+
+    setAttRef.current(attendanceWithNew);
+    attRef.current = attendanceWithNew;
+    showVisitorCard(visitor);
+  }, [events, playSound, showNotif, applyConversion, showMemberCard, showVisitorCard]);
 
   const registerVisitor = () => {
     const name = visitorForm.name.trim();
-    const evId = selEvRef.current;
+    const evId = visitorForm.eventId || selEvRef.current;
     if (!name || !evId || !setVisitors) return;
-    const visitorIds = (visitors || []).map((visitor) => parseInt(String(visitor.id || "").slice(1), 10)).filter(Number.isFinite);
-    const visitorId = `V${String(visitorIds.length ? Math.max(...visitorIds) + 1 : 1).padStart(3, "0")}`;
-    const attendanceIds = attendance.map((record) => parseInt(String(record.id || "").slice(1), 10)).filter(Number.isFinite);
-    const attendanceId = `A${String(attendanceIds.length ? Math.max(...attendanceIds) + 1 : 1).padStart(3, "0")}`;
+    const visitorId = nextPrefixedId(visitors || [], "V");
+    const attendanceId = nextPrefixedId(attendance, "A");
     const createdVisitor = {
       id: visitorId,
       name,
       contact: visitorForm.contact.trim(),
-      eventId: visitorForm.eventId || evId,
+      eventId: evId,
       date: visitorForm.date,
       invitedBy: visitorForm.invitedBy,
       notes: visitorForm.notes.trim(),
@@ -145,14 +243,32 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setVi
       timestamp: new Date().toISOString(),
       memberName: name,
     };
-    setVisitors((current) => [...current, createdVisitor]);
-    setAttendance((current) => [...current, newRecord]);
-    setScanStatus({ type: "success", member: { name } });
+    const attendanceWithNew = [...attendance, newRecord];
+    const visitorsWithNew = [...(visitors || []), createdVisitor];
     setShowVisitorForm(false);
     setVisitorForm({ name: "", contact: "", notes: "" });
     setInput("");
     playSound("success");
-    setTimeout(() => { setScanStatus(null); inputRef.current?.focus(); }, 2800);
+
+    if (shouldAutoConvertVisitor({ visitor: createdVisitor, attendance: attendanceWithNew, threshold: autoConvertRef.current })) {
+      setVisitors(visitorsWithNew);
+      visitorsRef.current = visitorsWithNew;
+      applyConversion(createdVisitor, membersRef.current, attendanceWithNew).then((converted) => {
+        if (converted) showMemberCard(converted);
+        else {
+          setAttendance(attendanceWithNew);
+          attRef.current = attendanceWithNew;
+          showVisitorCard(createdVisitor);
+        }
+      });
+      return;
+    }
+
+    setVisitors(visitorsWithNew);
+    setAttendance(attendanceWithNew);
+    visitorsRef.current = visitorsWithNew;
+    attRef.current = attendanceWithNew;
+    showVisitorCard(createdVisitor);
   };
 
   const openCompletionPin = () => {
@@ -380,14 +496,52 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setVi
 
       <div style={{ position: "relative", zIndex: 2, flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: isNarrow ? "1fr" : `1fr ${sidePanelWidth}px`, gridTemplateRows: isNarrow ? "auto 1fr" : undefined, overflow: "hidden" }}>
         {/* Main scan area */}
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: isNarrow ? "flex-start" : "center", padding: isNarrow ? 14 : 24, gap: 10, overflowY: isNarrow ? "auto" : "hidden" }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: isNarrow ? "flex-start" : "center", padding: isNarrow ? 14 : 24, gap: 10, overflowY: (isNarrow || scanStatus?.hold) ? "auto" : "hidden" }}>
           {/* Status card */}
           {scanStatus ? (
-            <div style={{ animation: "pop .35s ease", background: `${SC[scanStatus.type]}38`, border: `2px solid ${SC[scanStatus.type]}40`, borderRadius: 22, padding: isNarrow ? "20px 18px" : "28px 42px", textAlign: "center", width: "100%", maxWidth: isNarrow ? 720 : 500 }}>
-              <div style={{ fontSize: 64, marginBottom: 10 }}>{SICO[scanStatus.type]}</div>
+            <div style={{ animation: "pop .35s ease", background: `${SC[scanStatus.type]}38`, border: `2px solid ${SC[scanStatus.type]}40`, borderRadius: 22, padding: isNarrow ? "20px 18px" : "28px 32px", textAlign: "center", width: "100%", maxWidth: isNarrow ? 720 : 520 }}>
+              <div style={{ fontSize: scanStatus.hold ? 40 : 64, marginBottom: 10 }}>{scanStatus.hold === "member" ? "🎉" : SICO[scanStatus.type]}</div>
               <div style={{ fontSize: 26, fontWeight: 800, color: SC[scanStatus.type], marginBottom: 6 }}>{scanStatus.member?.name}</div>
-              <div style={{ fontSize: 16, color: SC[scanStatus.type], fontWeight: 600 }}>{SMSG[scanStatus.type]}</div>
-              {scanStatus.member?.ministry && scanStatus.type === "success" && <div style={{ fontSize: 13, color: theme.textMuted, marginTop: 6 }}>{scanStatus.member.ministry}</div>}
+              <div style={{ fontSize: 16, color: SC[scanStatus.type], fontWeight: 600 }}>
+                {scanStatus.hold === "member" ? "You're now a member!" : scanStatus.hold === "visitor" ? "✓ Attendance Recorded" : SMSG[scanStatus.type]}
+              </div>
+              {scanStatus.member?.ministry && scanStatus.type === "success" && !scanStatus.hold && <div style={{ fontSize: 13, color: theme.textMuted, marginTop: 6 }}>{scanStatus.member.ministry}</div>}
+              {scanStatus.hold === "visitor" && (
+                <div style={{ marginTop: 16 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, letterSpacing: ".08em" }}>YOUR VISITOR ID</div>
+                  <div style={{ marginTop: 4, fontFamily: "'DM Mono', monospace", fontSize: 28, fontWeight: 800, letterSpacing: ".08em" }}>{scanStatus.visitorId}</div>
+                  <div style={{ display: "inline-block", marginTop: 12, padding: 10, background: "#fff", borderRadius: 12 }}>
+                    <QRCode value={scanStatus.visitorId} size={180} />
+                  </div>
+                  <div style={{ marginTop: 10, fontSize: 13, color: theme.textMuted, lineHeight: 1.45 }}>Save or screenshot this QR. Scan it next time you attend.</div>
+                  <button type="button" className="btn" onClick={dismissHold} style={{ marginTop: 14, background: theme.accent, color: "white", padding: "10px 20px", borderRadius: 10, fontSize: 14 }}>Continue</button>
+                </div>
+              )}
+              {scanStatus.hold === "member" && (
+                <div style={{ marginTop: 16 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, letterSpacing: ".08em" }}>YOUR MEMBER ID</div>
+                  <div style={{ marginTop: 4, fontFamily: "'DM Mono', monospace", fontSize: 28, fontWeight: 800, letterSpacing: ".08em" }}>{scanStatus.member?.id}</div>
+                  <div style={{ display: "flex", justifyContent: "center", gap: 16, flexWrap: "wrap", marginTop: 12 }}>
+                    {scanStatus.claimUrl ? (
+                      <div>
+                        <div style={{ display: "inline-block", padding: 10, background: "#fff", borderRadius: 12 }}>
+                          <QRCode value={scanStatus.claimUrl} size={188} />
+                        </div>
+                        <div style={{ marginTop: 8, fontSize: 12, color: theme.textMuted, maxWidth: 220, marginLeft: "auto", marginRight: "auto", lineHeight: 1.4 }}>Scan with your phone to download your virtual member ID.</div>
+                      </div>
+                    ) : null}
+                    {scanStatus.scanPayload ? (
+                      <div>
+                        <div style={{ display: "inline-block", padding: 10, background: "#fff", borderRadius: 12 }}>
+                          <QRCode value={scanStatus.scanPayload} size={scanStatus.claimUrl ? 148 : 188} />
+                        </div>
+                        <div style={{ marginTop: 8, fontSize: 12, color: theme.textMuted, maxWidth: 200, marginLeft: "auto", marginRight: "auto", lineHeight: 1.4 }}>{scanStatus.claimUrl ? "Kiosk scan QR" : "Scan this at the kiosk next time."}</div>
+                      </div>
+                    ) : null}
+                  </div>
+                  <button type="button" className="btn" onClick={dismissHold} style={{ marginTop: 14, background: theme.accent, color: "white", padding: "10px 20px", borderRadius: 10, fontSize: 14 }}>Continue</button>
+                </div>
+              )}
             </div>
           ) : (
             <div style={{ background: theme.surface, border: `2px dashed ${theme.border}`, borderRadius: 22, padding: isNarrow ? "22px 18px" : "32px 42px", textAlign: "center", width: "100%", maxWidth: isNarrow ? 720 : 500 }}>
@@ -540,7 +694,7 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setVi
               <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Log New Visitor</h2>
               <button className="btn" onClick={() => { setShowVisitorForm(false); setScanStatus(null); }} style={{ background: "transparent", color: theme.textMuted, padding: 4 }}><Icon name="close" size={18} /></button>
             </div>
-            <div style={{ color: theme.textMuted, fontSize: 12, marginBottom: 16 }}>Save this attendee and record today's attendance. A permanent Member ID can be assigned later.</div>
+            <div style={{ color: theme.textMuted, fontSize: 12, marginBottom: 16 }}>Save this attendee and record today's attendance. You'll get a Visitor ID to use next time.</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
               <div><label style={{ display: "block", fontSize: 11, fontWeight: 700, color: theme.textMuted, marginBottom: 6, textTransform: "uppercase", letterSpacing: ".05em" }}>Full Name *</label><input type="text" autoFocus value={visitorForm.name} onChange={(event) => setVisitorForm((current) => ({ ...current, name: event.target.value }))} placeholder="Visitor name" style={{ width: "100%", boxSizing: "border-box", padding: "10px 13px", background: theme.surface2, border: `1.5px solid ${theme.border}`, borderRadius: 10, color: theme.text, fontSize: 14, outline: "none", fontFamily: "inherit" }} /></div>
               <div><label style={{ display: "block", fontSize: 11, fontWeight: 700, color: theme.textMuted, marginBottom: 6, textTransform: "uppercase", letterSpacing: ".05em" }}>Contact Number</label><input type="tel" value={visitorForm.contact} onChange={(event) => setVisitorForm((current) => ({ ...current, contact: event.target.value }))} placeholder="09XXXXXXXXX" style={{ width: "100%", boxSizing: "border-box", padding: "10px 13px", background: theme.surface2, border: `1.5px solid ${theme.border}`, borderRadius: 10, color: theme.text, fontSize: 14, outline: "none", fontFamily: "inherit" }} /></div>
