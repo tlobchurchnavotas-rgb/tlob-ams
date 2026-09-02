@@ -40,23 +40,30 @@ export async function captureCardPng(cardEl) {
       clone.style.background = "#ffffff";
       clone.style.transform = "none";
       clone.style.position = "static";
+      clone.style.left = "auto";
+      clone.style.top = "auto";
     },
   });
   return canvasToBlob(rendered, "image/png");
 }
 
-export async function saveImageBlob(blob, filename) {
-  const file = new File([blob], filename, { type: blob.type || "image/png" });
+export function isIosDevice() {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  if (/iPad|iPhone|iPod/i.test(ua)) return true;
+  return navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+}
 
-  if (typeof navigator.canShare === "function" && navigator.canShare({ files: [file] })) {
-    try {
-      await navigator.share({ files: [file], title: filename });
-      return;
-    } catch (error) {
-      if (error?.name === "AbortError") throw error;
-    }
-  }
+export function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Could not read image."));
+    reader.readAsDataURL(blob);
+  });
+}
 
+function triggerAnchorDownload(blob, filename) {
   const objectUrl = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = objectUrl;
@@ -67,4 +74,23 @@ export async function saveImageBlob(blob, filename) {
   link.click();
   link.remove();
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+}
+
+export async function saveImageBlob(blob, filename) {
+  const file = new File([blob], filename, { type: blob.type || "image/png" });
+  const canShareFiles = typeof navigator.canShare === "function" && navigator.canShare({ files: [file] });
+
+  // iOS ignores <a download> for blobs. The share sheet is where "Save Image" appears.
+  if (isIosDevice() && canShareFiles) {
+    try {
+      await navigator.share({ files: [file], title: filename });
+      return;
+    } catch (error) {
+      if (error?.name === "AbortError") throw error;
+    }
+  }
+
+  // Android/desktop: a real file download. Do not use Web Share first — that
+  // opens a share sheet with no "Save image" / gallery option.
+  triggerAnchorDownload(blob, filename);
 }

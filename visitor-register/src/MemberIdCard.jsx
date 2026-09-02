@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { toDataURL } from "qrcode";
 import { memberQrPayload } from "./claim.js";
-import { captureCardPng, fetchAsDataUrl, saveImageBlob } from "./memberCardDownload.js";
+import { blobToDataUrl, captureCardPng, fetchAsDataUrl, saveImageBlob } from "./memberCardDownload.js";
 
 const LOGO_SRC = `${import.meta.env.BASE_URL}logo.png`;
 
@@ -19,6 +19,7 @@ export default function MemberIdCard({ claim }) {
   const [qrSrc, setQrSrc] = useState("");
   const [logoSrc, setLogoSrc] = useState(LOGO_SRC);
   const [ready, setReady] = useState(false);
+  const [previewSrc, setPreviewSrc] = useState("");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
@@ -42,11 +43,15 @@ export default function MemberIdCard({ claim }) {
     let cancelled = false;
     blobRef.current = null;
     setReady(false);
+    setPreviewSrc("");
     const timer = window.setTimeout(async () => {
       try {
         const blob = await captureCardPng(cardRef.current);
         if (cancelled) return;
         blobRef.current = blob;
+        const dataUrl = await blobToDataUrl(blob);
+        if (cancelled) return;
+        setPreviewSrc(dataUrl);
         setReady(true);
         setError("");
       } catch (err) {
@@ -73,7 +78,7 @@ export default function MemberIdCard({ claim }) {
       }
       if (!blob) throw new Error("The ID card is still loading. Please wait a moment.");
       await saveImageBlob(blob, filename);
-      setStatus("Saved. Check Photos or Downloads.");
+      setStatus("Downloaded. Check Downloads, or long-press the card and tap Save image.");
     } catch (err) {
       if (err?.name === "AbortError") {
         setStatus("");
@@ -106,8 +111,13 @@ export default function MemberIdCard({ claim }) {
           color-scheme: only light;
         }
       `}</style>
-      <div style={{ margin: "0 auto", display: "flex", justifyContent: "center" }}>
-        <div ref={cardRef} className="tlob-member-card">
+      <div style={{ margin: "0 auto", display: "flex", justifyContent: "center", position: "relative" }}>
+        <div
+          ref={cardRef}
+          className="tlob-member-card"
+          aria-hidden={previewSrc ? "true" : undefined}
+          style={previewSrc ? { position: "absolute", left: -9999, top: 0 } : undefined}
+        >
           <div style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", background: "#1e293b", color: "#fff", padding: "3px 6px", borderRadius: 5, border: "1px solid #0f172a", flexShrink: 0, boxSizing: "border-box" }}>
             <img src={logoSrc} alt="" style={{ width: 18, height: 18, borderRadius: "50%", border: "1px solid rgba(255,255,255,.3)", objectFit: "cover", flexShrink: 0 }} />
             <div style={{ fontSize: 10, fontWeight: 700, lineHeight: 1.1, flex: 1, textAlign: "left", color: "#fff" }}>TLOB<br />Member ID</div>
@@ -129,6 +139,15 @@ export default function MemberIdCard({ claim }) {
             </div>
           </div>
         </div>
+        {previewSrc ? (
+          <img
+            src={previewSrc}
+            alt={`${claim.name} virtual member ID card`}
+            width={250}
+            height={310}
+            style={{ width: 250, height: 310, display: "block", borderRadius: 8 }}
+          />
+        ) : null}
       </div>
       {error && <div style={{ marginTop: 14, fontSize: 13, color: "#ef4444", fontWeight: 700 }}>{error}</div>}
       {status && !error && <div style={{ marginTop: 14, fontSize: 13, color: "#10b981", fontWeight: 700 }}>{status}</div>}
@@ -152,10 +171,12 @@ export default function MemberIdCard({ claim }) {
           opacity: qrSrc && !busy ? 1 : 0.6,
         }}
       >
-        {busy ? "Saving…" : "Save PNG"}
+        {busy ? "Downloading…" : "Download PNG"}
       </button>
       <div style={{ marginTop: 10, fontSize: 12, color: "#5a6a8a" }}>
-        {ready ? "One tap saves the full member ID card." : "Preparing your card…"}
+        {ready
+          ? "Download the card, or long-press it and choose Save image."
+          : "Preparing your card…"}
       </div>
     </div>
   );
