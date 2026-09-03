@@ -28,6 +28,8 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setMe
   const [isShort, setIsShort] = useState(() => (typeof window !== "undefined" ? window.innerHeight <= 760 : false));
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [showRegisterQr, setShowRegisterQr] = useState(false);
+  const [showMemberClaimQr, setShowMemberClaimQr] = useState(false);
+  const [selectedMemberClaim, setSelectedMemberClaim] = useState(null);
   const [showCompletionPin, setShowCompletionPin] = useState(false);
   const [completionPinInput, setCompletionPinInput] = useState("");
   const [completionPinError, setCompletionPinError] = useState("");
@@ -521,21 +523,13 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setMe
                 <div style={{ marginTop: 16 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, letterSpacing: ".08em" }}>YOUR MEMBER ID</div>
                   <div style={{ marginTop: 4, fontFamily: "'DM Mono', monospace", fontSize: 28, fontWeight: 800, letterSpacing: ".08em" }}>{scanStatus.member?.id}</div>
-                  <div style={{ display: "flex", justifyContent: "center", gap: 16, flexWrap: "wrap", marginTop: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "center", marginTop: 12 }}>
                     {scanStatus.claimUrl ? (
                       <div>
                         <div style={{ display: "inline-block", padding: 10, background: "#fff", borderRadius: 12 }}>
                           <QRCode value={scanStatus.claimUrl} size={188} />
                         </div>
-                        <div style={{ marginTop: 8, fontSize: 12, color: theme.textMuted, maxWidth: 220, marginLeft: "auto", marginRight: "auto", lineHeight: 1.4 }}>Scan with your phone to download your virtual member ID.</div>
-                      </div>
-                    ) : null}
-                    {scanStatus.scanPayload ? (
-                      <div>
-                        <div style={{ display: "inline-block", padding: 10, background: "#fff", borderRadius: 12 }}>
-                          <QRCode value={scanStatus.scanPayload} size={scanStatus.claimUrl ? 148 : 188} />
-                        </div>
-                        <div style={{ marginTop: 8, fontSize: 12, color: theme.textMuted, maxWidth: 200, marginLeft: "auto", marginRight: "auto", lineHeight: 1.4 }}>{scanStatus.claimUrl ? "Kiosk scan QR" : "Scan this at the kiosk next time."}</div>
+                        <div style={{ marginTop: 8, fontSize: 12, color: theme.textMuted, maxWidth: 320, marginLeft: "auto", marginRight: "auto", lineHeight: 1.4 }}>Scan with your phone to download your virtual member ID.</div>
                       </div>
                     ) : null}
                   </div>
@@ -616,16 +610,48 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setMe
               <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, color: theme.textMuted, opacity: .5, paddingTop: 40 }}>
                 <Icon name="scan" size={36} /><div style={{ fontSize: 12, textAlign: "center" }}>No check-ins yet.<br />Start scanning!</div>
               </div>
-            ) : recentCheckins.map((a, i) => (
-              <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "11px 13px", background: i === 0 ? `${theme.accent}0d` : theme.surface2, borderRadius: 12, border: `1px solid ${i === 0 ? theme.accent + "30" : theme.border}`, animation: i === 0 ? "pop .3s ease" : undefined }}>
-                <Avatar member={a.memberObj || { name: a.memberName }} size={36} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: 13 }}>{a.memberName}</div>
-                  <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 1 }}>{a.memberId || a.visitorId || "—"} • {new Date(a.timestamp).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</div>
+            ) : recentCheckins.map((a, i) => {
+              const memberForClaim = a.memberId && a.memberObj && a.memberObj.id ? a.memberObj : null;
+              const claimUrl = memberForClaim ? buildClaimUrl(registerBaseUrlRef.current, memberForClaim) : "";
+              const hasClaimQr = Boolean(memberForClaim && claimUrl && String(claimUrl).startsWith("http"));
+
+              return (
+                <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "11px 13px", background: i === 0 ? `${theme.accent}0d` : theme.surface2, borderRadius: 12, border: `1px solid ${i === 0 ? theme.accent + "30" : theme.border}`, animation: i === 0 ? "pop .3s ease" : undefined }}>
+                  <Avatar member={a.memberObj || { name: a.memberName }} size={36} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13 }}>{a.memberName}</div>
+                    <div style={{ fontSize: 11.5, color: theme.textMuted, marginTop: 1 }}>{a.memberId || a.visitorId || "—"} • {new Date(a.timestamp).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</div>
+                  </div>
+                  {hasClaimQr ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedMemberClaim({ member: memberForClaim, url: claimUrl });
+                        setShowMemberClaimQr(true);
+                      }}
+                      style={{
+                        border: `1px solid ${theme.accent}33`,
+                        background: `${theme.accent}12`,
+                        color: theme.accent,
+                        borderRadius: 8,
+                        padding: "7px 10px",
+                        fontSize: 10,
+                        fontWeight: 800,
+                        letterSpacing: ".05em",
+                        textTransform: "uppercase",
+                        cursor: "pointer",
+                        fontFamily: "inherit",
+                        whiteSpace: "nowrap",
+                      }}
+                      title={`Show QR for ${memberForClaim.name} to download their virtual member ID card`}
+                    >
+                      QR
+                    </button>
+                  ) : null}
+                  {i === 0 && <div style={{ width: 9, height: 6, borderRadius: "50%", background: theme.success, boxShadow: `0 0 8px ${theme.success}` }} />}
                 </div>
-                {i === 0 && <div style={{ width: 9, height: 6, borderRadius: "50%", background: theme.success, boxShadow: `0 0 8px ${theme.success}` }} />}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
@@ -683,6 +709,30 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setMe
               <QRCode value={visitorRegisterUrl} size={240} />
             </div>
             <div style={{ marginTop: 12, fontSize: 11, color: theme.textMuted, wordBreak: "break-all" }}>{visitorRegisterUrl}</div>
+          </div>
+        </div>
+      )}
+
+      {showMemberClaimQr && selectedMemberClaim && (
+        <div
+          className="modal-overlay"
+          onClick={() => setShowMemberClaimQr(false)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.7)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100 }}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{ background: theme.surface, color: theme.text, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 26, width: "calc(100% - 32px)", maxWidth: 360, textAlign: "center", fontFamily: "'DM Sans', sans-serif", boxSizing: "border-box" }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>Member card QR</h2>
+              <button className="btn" onClick={() => setShowMemberClaimQr(false)} style={{ background: "transparent", color: theme.textMuted, padding: 4 }} aria-label="Close"><Icon name="close" size={18} /></button>
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>{selectedMemberClaim.member.name}</div>
+            <div style={{ display: "inline-block", padding: 12, background: "#fff", borderRadius: 14, border: `1px solid ${theme.border}` }}>
+              <QRCode value={selectedMemberClaim.url} size={220} />
+            </div>
+            <div style={{ marginTop: 12, fontSize: 12, color: theme.textMuted, lineHeight: 1.45 }}>Scan this to open the virtual member ID card and download it from the site.</div>
+            <a href={selectedMemberClaim.url} target="_blank" rel="noreferrer" style={{ display: "inline-block", marginTop: 14, background: theme.accent, color: "white", borderRadius: 10, padding: "10px 16px", fontWeight: 700, fontSize: 13, textDecoration: "none" }}>Open link</a>
           </div>
         </div>
       )}

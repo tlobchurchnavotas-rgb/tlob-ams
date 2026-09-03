@@ -85,7 +85,7 @@ async function getQRCardJpgDataUrl(member, logoSrc) {
         <span style="padding:0 2px;border-radius:2px;background:#f3f4f6;color:#374151;border:.5px solid #d1d5db;white-space:nowrap;font-size:8px;">${escapeHtml(member.id)}</span>
         <span style="padding:0 4px;border-radius:2px;background:#e0f2fe;color:#0369a1;border:.5px solid #06b6d4;white-space:nowrap;font-weight:600;font-size:8px;min-height:14px;"><span style="display:inline-flex;width:3px;height:3px;border-radius:50%;margin-right:2px;vertical-align:middle;background:${member.status === "Active" ? "#10b981" : "#ef4444"};"></span>${escapeHtml(member.status || "")}</span>
       </div>
-      <div style="width:100%;text-align:center;font-size:8px;font-weight:600;color:#666;border-top:1px solid #5d5f64;padding-top:3px;margin-top:3px;box-sizing:border-box;">Gamitin sa iyong weekly attendance. Huwag iwawala.</div>
+      <div style="width:100%;text-align:center;font-size:8px;font-weight:600;color:#666;border-top:1px solid #5d5f64;padding-top:3px;margin-top:3px;box-sizing:border-box;">Gamitin sa iyong weekly attendance.</div>
     </div>`;
   document.body.appendChild(card);
   await Promise.all(Array.from(card.querySelectorAll("img")).map(image => image.complete ? Promise.resolve() : new Promise(resolve => { image.onload = resolve; image.onerror = resolve; })));

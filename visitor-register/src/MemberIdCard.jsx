@@ -135,7 +135,7 @@ export default function MemberIdCard({ claim }) {
               </span>
             </div>
             <div style={{ width: "100%", textAlign: "center", fontSize: 8, fontWeight: 600, color: "#666", borderTop: "1px solid #5d5f64", paddingTop: 3, marginTop: 3, boxSizing: "border-box", fontFamily: "Inter, system-ui, sans-serif" }}>
-              Gamitin sa iyong weekly attendance. Huwag iwawala.
+              Gamitin sa iyong weekly attendance.
             </div>
           </div>
         </div>

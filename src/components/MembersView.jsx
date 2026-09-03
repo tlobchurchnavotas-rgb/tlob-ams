@@ -1096,7 +1096,7 @@ function BulkPrintModal({ members, theme, showNotif, onClose }) {
               ${card.status}
             </div>
           </div>
-          <div class="card-footer">Gamitin sa iyong weekly attendance. Huwag iwawala.</div>
+          <div class="card-footer">Gamitin sa iyong weekly attendance.</div>
         </div>
       </div>
     `).join("")}
