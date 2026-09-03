@@ -1,4 +1,4 @@
-# TLOB Attendance System
+# TLOB Attendance Management System
 **The Lord Our Banner Christian Church**  
 Church Attendance Management System
 
@@ -58,162 +58,116 @@ If iOS warns about the certificate, you’ll need to trust it on the iPad (this 
 
 ---
 
-## 🔑 Default Login Credentials
+## 🔑 Default / Demo Login Credentials
+
+When Supabase is not configured, the app falls back to a small local demo set defined in the app. These are for local/offline testing only:
 
 | Role  | Username | Password  |
 |-------|----------|-----------|
 | Admin | `admin`  | `admin123`|
 | Usher | `usher`  | `usher123`|
 
+> If Supabase Auth is configured, sign in with the actual Supabase user accounts instead of the demo values above.
+
 ---
 
 ## 📁 Project Structure
 
-```
-tlob-church-app/
-├── public/
-│   ├── index.html
-│   └── logo.png              ← Church logo
-├── src/
-│   ├── App.jsx               ← Main app (routing, state, layout)
-│   ├── index.js              ← React entry point
-│   ├── constants.js          ← Logo, seed data, usePersisted hook
-│   ├── utils/
-│   │   └── qr.js             ← QR code generator (SVG, no library needed)
-│   └── components/
-│       ├── Icon.jsx           ← SVG icon system
-│       ├── Avatar.jsx         ← Member avatar (photo or initial)
-│       ├── Charts.jsx         ← BarChart, LineChart, DonutChart
-│       ├── LoginPage.jsx      ← Login screen
-│       ├── KioskView.jsx      ← Self-service kiosk mode
-│       ├── DashboardView.jsx  ← Overview & stats
-│       ├── MembersView.jsx    ← Member list + BulkPrintModal
-│       ├── MemberProfile.jsx  ← Individual member profile & QR print
-│       ├── EventsView.jsx     ← Event management
-│       ├── ScannerView.jsx    ← QR scanner (staff)
-│       ├── AttendanceView.jsx ← Attendance logs
-│       ├── ReportsView.jsx    ← Attendance & absentee reports
-│       ├── VisitorsView.jsx   ← Visitor tracking
-│       ├── CelebrationsView.jsx ← Birthdays & anniversaries
-│       └── UserMgmtView.jsx   ← App user management (Admin)
+```text
+TLOB AMS v.1.8/
+├── .github/                  ← release automation
+├── build/                    ← production web build output
+├── build-resources/          ← Electron icon resources
+├── desktop.ini
+├── electron/                 ← Electron main + preload scripts
+├── public/                   ← static assets, app logo, HTML shell
+├── src/                      ← React app source
+│   ├── App.jsx               ← main app shell, routing, auth state
+│   ├── auth.js               ← auth helpers
+│   ├── auditLogs.js          ← audit logging helpers
+│   ├── components/           ← UI screens and features
+│   ├── constants.js          ← logo, seed data, persistence helpers
+│   ├── index.js              ← React bootstrap
+│   ├── migrate.js            ← Supabase migration utilities
+│   ├── publicRegisterApi.js  ← public registration API wrapper
+│   ├── roles.js              ← role helpers
+│   ├── supabaseClient.js     ← Supabase client configuration
+│   └── utils/                ← QR and helper utilities
+├── supabase/                 ← SQL schema and migration files
+├── tools/                    ← asset generation helpers
+├── visitor-register/         ← separate public Vite app for guest check-in
 ├── package.json
-└── README.md
+├── README.md
+└── .env.example (if present) 
 ```
 
 ---
 
 ## ✨ Features
 
-- **Dashboard** — Stats, charts, upcoming celebrations widget
-- **Members** — CRUD, photo upload, CSV bulk import, QR ID card print, **Bulk Print QR** with filters
-- **Events** — Create/manage events with templates
-- **QR Scanner** — Manual + camera scan for check-in (staff mode)
-- **Kiosk Mode** — Self-service entrance scanner (fullscreen)
-- **Attendance Logs** — Filterable records
-- **Reports** — Attendance & absentee reports (PDF/CSV export), Admin only
-- **Visitors** — Log walk-in visitors, convert to member
-- **Public self-registration** — separate `visitor-register/` app on Vercel; visitors check themselves in (see setup below)
-- **Celebrations** — Birthday & anniversary tracker
-- **User Management** — Manage app users (Admin only)
-- **Dark / Light Mode**
-- **Local Storage** — All data persists in browser (prefix: `tlob_`)
+- Dashboard with attendance metrics and celebration summaries
+- Member management with QR profile cards and bulk printing
+- Events management, attendance tracking, and visitor check-in
+- Staff QR scanner and kiosk-style self-check-in flow
+- Admin-only reporting, account management, and role-based access
+- Optional Supabase backend with row-level security and real tables
+- Local fallback behavior when Supabase is offline or unset
+- Dark/light mode and browser persistence
+- Electron desktop packaging for Windows
 
 ---
 
-## 🔧 Customization
+## 🔧 Configuration and Customization
 
-### Replacing the Church Logo
-Replace `public/logo.png` with your image. Also update `CHURCH_LOGO_B64` in `src/constants.js` if you want it embedded in printed QR cards (convert your image to base64).
+### Replacing the church logo
+Replace the image in `public/logo.png`. If you also want the logo embedded in printed QR cards, update `CHURCH_LOGO_B64` in `src/constants.js`.
 
-### Changing Church Name
-Search for `"The Lord Our Banner"` in `src/App.jsx`, `src/constants.js`, and component files.
+### Changing the church name
+Search for `The Lord Our Banner` in the app source and update the display strings as needed.
 
-### Connecting a Real Backend
-Currently the app can persist data to either:
-- **localStorage** (default / offline)
-- **Supabase** (real database) — when configured via environment variables
+### Supabase setup (recommended)
+The app supports both a local demo mode and a real Supabase-backed mode.
 
-#### Supabase setup (recommended)
 1. Create a Supabase project.
-2. In the Supabase dashboard: **SQL Editor** → run **one** of these:
-   - `supabase/schema_auth_rls.sql` (**recommended**) — enables Supabase Auth + secure per-user storage
-   - `supabase/schema.sql` (legacy/demo) — anonymous read/write (not recommended for production)
-3. Create a `.env` file in the project root with:
+2. Open the Supabase SQL editor and run the schema you need:
+   - `supabase/schema_auth_rls.sql` for the secure, recommended setup
+   - `supabase/schema_real_tables.sql` for the app tables (`members`, `events`, `attendance`, `visitors`)
+   - `supabase/schema_realtime.sql` if you want live updates for public registrations or kiosk activity
+3. Add a root `.env` file with:
 
 ```bash
-REACT_APP_SUPABASE_URL=your_supabase_project_url
-REACT_APP_SUPABASE_ANON_KEY=your_supabase_anon_key
+REACT_APP_SUPABASE_URL=https://your-project.supabase.co
+REACT_APP_SUPABASE_ANON_KEY=your-anon-key
 ```
 
-4. Restart `npm start`.
+4. Restart the app:
+
+```bash
+npm start
+```
+
+> If Supabase is not configured, the app falls back to localStorage and demo data.
 
 ### Public visitor self-registration (Vercel)
+The public check-in site lives under `visitor-register/` and is intentionally separate from the main AMS app.
 
-Guests register from a **separate** site (`visitor-register/`, deployed on Vercel). Submissions go through the `self-register` Edge Function and write a **visitor** row plus **attendance**. Staff convert visitors to members later in AMS.
+1. Deploy the Vite app from the `visitor-register` folder on Vercel.
+2. Set the project root directory to `visitor-register`.
+3. Add these environment variables in Vercel:
 
-Do **not** open RLS on `visitors` / `attendance` for anonymous users.
+```bash
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
+```
 
-For the kiosk to show self-registrations live, run `supabase/schema_realtime.sql` once in the SQL Editor (enables Realtime on those tables). The app also polls attendance/visitors every few seconds as a fallback.
-
-#### 1) Deploy the Edge Function
-
-Set the church owner UUID (the same Supabase Auth user id that owns AMS data in the desktop app):
+4. Deploy the Edge Function from Supabase:
 
 ```bash
 supabase secrets set CHURCH_OWNER_ID=00000000-0000-0000-0000-000000000000
 supabase functions deploy self-register
 ```
 
-`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are provided automatically by Supabase. Confirm `CHURCH_OWNER_ID` in the dashboard: **Authentication → Users** (or the `id` of the admin profile).
-
-#### 2) Deploy the register app on Vercel (not the full AMS)
-
-The guest site lives in `visitor-register/` — a separate Vite app. Do **not** deploy the whole TLOB AMS project.
-
-1. In Vercel: **Add New Project** → import this GitHub repo.
-2. Set **Root Directory** to `visitor-register`.
-3. Framework: Vite. Build command `npm run build`, output `dist`.
-4. Environment variables (Vite prefix):
-
-```bash
-VITE_SUPABASE_URL=your_supabase_project_url
-VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-```
-
-Use the same URL and anon key as AMS `.env`, just rename `REACT_APP_*` → `VITE_*`.
-
-The public page is `https://your-register-app.vercel.app`. Optional event pin: `https://your-register-app.vercel.app/?event=E012`.
-
-Paste that origin in AMS **Settings → Public self-registration**.
-
-#### 3) Local preview of the register app
-
-```bash
-cd visitor-register
-copy .env.example .env
-# edit .env with your VITE_SUPABASE_* values
-npm install
-npm run dev
-```
-
-Open the Vite URL (usually `http://localhost:5173`). The Edge Function must already be deployed.
-
-#### Next phase: Real tables (recommended)
-After Auth is working, run `supabase/schema_real_tables.sql` to create real tables:
-- `members`
-- `events`
-- `attendance`
-- `visitors`
-
-The app will automatically load/save those datasets for the signed-in user.
-
-The app previously stored data in `app_kv`. That is now only used for small key/value state (and the app will still fall back to localStorage if Supabase is offline).
-If Supabase is not configured or is temporarily offline, it will fall back to localStorage.
-
-> Security note: `supabase/schema_auth_rls.sql` requires users to sign in via Supabase Auth and uses Row Level Security (RLS) so users can only access their own data.
-
-### Enabling Real QR Camera Scanning
-The camera scanner uses `html5-qrcode` loaded from CDN. This works fine locally — just make sure you're on **https** or **localhost** so the browser allows camera access.
+The `CHURCH_OWNER_ID` should match the Supabase Auth user that owns the AMS data. This is typically the admin user ID in the project.
 
 ---
 
@@ -223,90 +177,69 @@ The camera scanner uses `html5-qrcode` loaded from CDN. This works fine locally 
 npm run build
 ```
 
-Output goes to the `build/` folder. Deploy to any static host (Vercel, Netlify, GitHub Pages, etc.).
+This outputs the web build into the `build/` directory.
 
 ---
 
 ## 🖥️ Desktop App (Windows) — Electron
 
-This project can be packaged as a standalone Windows desktop app using **Electron + electron-builder**.
+This project can also be packaged as a standalone Windows desktop app using Electron.
 
-### One-time setup
-
-```bash
-npm install
-```
-
-### Run as a desktop app (dev)
-
-Starts the React dev server and launches Electron.
+### Run in development
 
 ```bash
 npm run electron:dev
 ```
 
-### Build an installer (.exe)
+This starts the React development server and launches Electron against the HTTPS local app URL.
 
-This will:
-- generate app icons (`public/logo.png`, `build-resources/icon.ico`)
-- build the React production bundle
-- create an installer in the `dist/` folder
+### Create an installer
 
 ```bash
 npm run electron:dist
 ```
 
-> If the build fails with a symlink permission error like:
-> `"A required privilege is not held by the client"`  
-> enable **Windows Developer Mode** (Settings → Privacy & security → For developers → Developer Mode)
-> or run the build from an **Administrator** terminal. This is required so `electron-builder` can unpack its Windows helper tools.
+This builds the React app and creates an installer in the `dist/` folder.
 
-### Build a “portable folder” (no installer)
+### Create a portable folder
 
 ```bash
 npm run electron:pack
 ```
 
-### Publish auto-updates via GitHub Releases (recommended)
-
-This project uses a safer two-step workflow:
-- pushing a version tag (`v*`) creates a **draft** GitHub Release with installer/update assets
-- you manually publish that draft when you are ready for public rollout
-
-1. Update app version in `package.json`:
+### Publish app updates
 
 ```bash
 npm version patch
-```
-
-Use `minor` or `major` when needed.
-
-2. Push commit and tag to GitHub:
-
-```bash
-git push && git push --tags
-```
-
-3. GitHub Actions runs `.github/workflows/release.yml` and creates a **draft** release for that tag with installer/update assets.
-
-4. If you build locally instead, use the new release script to publish draft GitHub update metadata:
-
-```bash
 npm run electron:release
 ```
 
-5. After publishing the draft, installed app clients can fetch the update through the built-in updater.
+> If Windows blocks the installer build because of symlink permissions, enable Developer Mode or run the terminal as Administrator.
 
 ---
 
 ## 📝 Data Storage
 
-All data is stored in `localStorage` with the prefix `tlob_`:
-- `tlob_members` — Member records
-- `tlob_events` — Events
-- `tlob_attendance` — Attendance logs
-- `tlob_users` — App users
-- `tlob_visitors` — Visitor records
-- `tlob_darkMode` — Theme preference
+The app uses a layered storage approach:
 
-To reset all data, open browser DevTools → Application → Local Storage → clear all `tlob_*` keys.
+- Local browser storage as the fallback, under keys such as `tlob_members`, `tlob_events`, `tlob_attendance`, `tlob_visitors`, and `tlob_darkMode`
+- Supabase tables when configured and signed in
+- `app_kv` for small key/value state in the Supabase-backed configuration
+
+To clear local data in a browser, open DevTools → Application → Local Storage and delete the `tlob_*` keys.
+
+---
+
+## ✅ Useful Commands
+
+```bash
+npm install
+npm start
+npm run start:lan
+npm run start:lan:https
+npm run build
+npm run electron:dev
+npm run electron:dist
+```
+
+This project is designed to work both in the browser and as a packaged desktop application, with Supabase enabled when you want real multi-user data storage.
