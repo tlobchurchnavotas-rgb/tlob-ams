@@ -274,6 +274,7 @@ function useSupabaseTable(tableName, initialArray, ownerId) {
       if (out.visitorId !== undefined) { out.visitor_id = out.visitorId; delete out.visitorId; }
       if (out.eventId !== undefined) { out.event_id = out.eventId; delete out.eventId; }
       if (out.memberName !== undefined) { out.member_name = out.memberName; delete out.memberName; }
+      if (out.memberCardQr !== undefined) { out.member_card_qr = out.memberCardQr; delete out.memberCardQr; }
       return out;
     }
     if (tableName === "visitors") {
@@ -303,6 +304,7 @@ function useSupabaseTable(tableName, initialArray, ownerId) {
       if (out.visitor_id !== undefined) { out.visitorId = out.visitor_id; delete out.visitor_id; }
       if (out.event_id !== undefined) { out.eventId = out.event_id; delete out.event_id; }
       if (out.member_name !== undefined) { out.memberName = out.member_name; delete out.member_name; }
+      if (out.member_card_qr !== undefined) { out.memberCardQr = out.member_card_qr; delete out.member_card_qr; }
       return out;
     }
     if (tableName === "visitors") {

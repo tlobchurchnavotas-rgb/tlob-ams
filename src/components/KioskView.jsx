@@ -29,6 +29,8 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setMe
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [showRegisterQr, setShowRegisterQr] = useState(false);
   const [showMemberClaimQr, setShowMemberClaimQr] = useState(false);
+  const [showMemberCardDirectory, setShowMemberCardDirectory] = useState(false);
+  const [memberCardSearch, setMemberCardSearch] = useState("");
   const [selectedMemberClaim, setSelectedMemberClaim] = useState(null);
   const [showCompletionPin, setShowCompletionPin] = useState(false);
   const [completionPinInput, setCompletionPinInput] = useState("");
@@ -59,6 +61,15 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setMe
     return `${origin}${qs}`;
   }, [publicRegisterBaseUrl, selEv]);
   const activeEv = events.find(e => e.id === selEv);
+  const availableMembers = useMemo(() => members.filter((member) => !member.archived), [members]);
+  const filteredMemberCards = useMemo(() => {
+    const query = memberCardSearch.trim().toLowerCase();
+    if (!query) return availableMembers;
+    return availableMembers.filter((member) => (
+      String(member.name || "").toLowerCase().includes(query)
+      || String(member.id || "").toLowerCase().includes(query)
+    ));
+  }, [availableMembers, memberCardSearch]);
   const sessionCount = attendance.filter(a => a.eventId === selEv).length;
   const recentCheckins = useMemo(() => attendance
     .filter(record => record.eventId === selEv)
@@ -79,7 +90,8 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setMe
   }, []);
 
   const applyConversion = useCallback(async (visitor, membersSnap, attendanceSnap) => {
-    const result = applyVisitorConversion(visitor, membersSnap, attendanceSnap);
+    const conversionRecord = attendanceSnap.find((record) => record.visitorId === visitor.id && record.eventId === selEvRef.current);
+    const result = applyVisitorConversion(visitor, membersSnap, attendanceSnap, conversionRecord?.id);
     if (!result || !setMembersRef.current || !setVisitorsRef.current) return null;
     setMembersRef.current(result.members);
     setAttRef.current(result.attendance);
@@ -613,7 +625,7 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setMe
             ) : recentCheckins.map((a, i) => {
               const memberForClaim = a.memberId && a.memberObj && a.memberObj.id ? a.memberObj : null;
               const claimUrl = memberForClaim ? buildClaimUrl(registerBaseUrlRef.current, memberForClaim) : "";
-              const hasClaimQr = Boolean(memberForClaim && claimUrl && String(claimUrl).startsWith("http"));
+              const hasClaimQr = Boolean(a.memberCardQr && memberForClaim && claimUrl && String(claimUrl).startsWith("http"));
 
               return (
                 <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "11px 13px", background: i === 0 ? `${theme.accent}0d` : theme.surface2, borderRadius: 12, border: `1px solid ${i === 0 ? theme.accent + "30" : theme.border}`, animation: i === 0 ? "pop .3s ease" : undefined }}>
@@ -653,6 +665,13 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setMe
               );
             })}
           </div>
+          <button
+            type="button"
+            onClick={() => { setMemberCardSearch(""); setShowMemberCardDirectory(true); }}
+            style={{ background: theme.surface2, color: theme.text, border: `1px solid ${theme.border}`, borderRadius: 10, padding: "10px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}
+          >
+            <Icon name="qr" size={16} /> Member cards
+          </button>
         </div>
       </div>
 
@@ -692,7 +711,7 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setMe
         <div
           className="modal-overlay"
           onClick={() => setShowRegisterQr(false)}
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.7)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100 }}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.7)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1200 }}
         >
           <div
             onClick={(event) => event.stopPropagation()}
@@ -717,7 +736,7 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setMe
         <div
           className="modal-overlay"
           onClick={() => setShowMemberClaimQr(false)}
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.7)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100 }}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.7)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1200 }}
         >
           <div
             onClick={(event) => event.stopPropagation()}
@@ -733,6 +752,57 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setMe
             </div>
             <div style={{ marginTop: 12, fontSize: 12, color: theme.textMuted, lineHeight: 1.45 }}>Scan this to open the virtual member ID card and download it from the site.</div>
             <a href={selectedMemberClaim.url} target="_blank" rel="noreferrer" style={{ display: "inline-block", marginTop: 14, background: theme.accent, color: "white", borderRadius: 10, padding: "10px 16px", fontWeight: 700, fontSize: 13, textDecoration: "none" }}>Open link</a>
+          </div>
+        </div>
+      )}
+
+      {showMemberCardDirectory && (
+        <div
+          className="modal-overlay"
+          onClick={() => setShowMemberCardDirectory(false)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.7)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100 }}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{ background: theme.surface, color: theme.text, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 22, width: "calc(100% - 32px)", maxWidth: 420, maxHeight: "80vh", overflowY: "auto", fontFamily: "'DM Sans', sans-serif", boxSizing: "border-box" }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>Member cards</h2>
+              <button className="btn" onClick={() => setShowMemberCardDirectory(false)} style={{ background: "transparent", color: theme.textMuted, padding: 4 }} aria-label="Close"><Icon name="close" size={18} /></button>
+            </div>
+            <div style={{ fontSize: 12, color: theme.textMuted, marginBottom: 14 }}>Choose a member to show their card QR for downloading.</div>
+            <input
+              type="search"
+              value={memberCardSearch}
+              onChange={(event) => setMemberCardSearch(event.target.value)}
+              placeholder="Search member name or ID"
+              aria-label="Search member name or ID"
+              style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", marginBottom: 12, background: theme.surface2, color: theme.text, border: `1px solid ${theme.border}`, borderRadius: 10, fontSize: 12, outline: "none", fontFamily: "inherit" }}
+            />
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {filteredMemberCards.map((member) => {
+                const claimUrl = buildClaimUrl(registerBaseUrlRef.current, member);
+                const available = String(claimUrl).startsWith("http");
+                return (
+                  <div key={member.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", background: theme.surface2, border: `1px solid ${theme.border}`, borderRadius: 10 }}>
+                    <Avatar member={member} size={32} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{member.name}</div>
+                      <div style={{ fontSize: 11, color: theme.textMuted }}>{member.id}</div>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={!available}
+                      onClick={() => { setSelectedMemberClaim({ member, url: claimUrl }); setShowMemberCardDirectory(false); setShowMemberClaimQr(true); }}
+                      style={{ border: `1px solid ${theme.accent}33`, background: `${theme.accent}12`, color: theme.accent, borderRadius: 8, padding: "7px 10px", fontSize: 10, fontWeight: 800, textTransform: "uppercase", cursor: available ? "pointer" : "not-allowed", fontFamily: "inherit", opacity: available ? 1 : .45 }}
+                    >
+                      QR
+                    </button>
+                  </div>
+                );
+              })}
+              {filteredMemberCards.length === 0 && <div style={{ fontSize: 13, color: theme.textMuted, textAlign: "center", padding: 18 }}>{availableMembers.length === 0 ? "No members available." : "No matching members."}</div>}
+            </div>
           </div>
         </div>
       )}

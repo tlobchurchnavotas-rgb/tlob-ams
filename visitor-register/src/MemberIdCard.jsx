@@ -78,7 +78,7 @@ export default function MemberIdCard({ claim }) {
       }
       if (!blob) throw new Error("The ID card is still loading. Please wait a moment.");
       await saveImageBlob(blob, filename);
-      setStatus("Downloaded. Check Downloads, or long-press the card and tap Save image.");
+      setStatus("Downloaded. Check Downloads or Album.");
     } catch (err) {
       if (err?.name === "AbortError") {
         setStatus("");

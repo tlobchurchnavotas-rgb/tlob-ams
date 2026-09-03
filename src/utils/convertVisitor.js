@@ -50,21 +50,27 @@ export function buildMemberFromVisitor(visitor, members) {
   };
 }
 
-export function remapVisitorAttendance(attendance, visitorId, member) {
+export function remapVisitorAttendance(attendance, visitorId, member, cardQrAttendanceId) {
   return (attendance || []).map((record) => (
     record.visitorId === visitorId
-      ? { ...record, memberId: member.id, visitorId: null, memberName: member.name }
+      ? {
+        ...record,
+        memberId: member.id,
+        visitorId: null,
+        memberName: member.name,
+        memberCardQr: record.id === cardQrAttendanceId,
+      }
       : record
   ));
 }
 
-export function applyVisitorConversion(visitor, members, attendance) {
+export function applyVisitorConversion(visitor, members, attendance, cardQrAttendanceId) {
   if (!visitor || visitor.convertedToMember) return null;
   const member = buildMemberFromVisitor(visitor, members);
   return {
     member,
     members: [...(members || []), member],
-    attendance: remapVisitorAttendance(attendance, visitor.id, member),
+    attendance: remapVisitorAttendance(attendance, visitor.id, member, cardQrAttendanceId),
   };
 }
 
@@ -77,8 +83,9 @@ export async function convertVisitorToMember({
   setVisitors,
   actor,
   source = "visitors",
+  cardQrAttendanceId,
 }) {
-  const result = applyVisitorConversion(visitor, members, attendance);
+  const result = applyVisitorConversion(visitor, members, attendance, cardQrAttendanceId);
   if (!result) return null;
   setMembers(result.members);
   setAttendance(result.attendance);

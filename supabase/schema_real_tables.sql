@@ -81,12 +81,14 @@ create table if not exists public.attendance (
   event_id text,
   timestamp timestamptz,
   member_name text,
+  member_card_qr boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   primary key (owner_id, id)
 );
 
 alter table public.attendance add column if not exists visitor_id text;
+alter table public.attendance add column if not exists member_card_qr boolean not null default false;
 
 drop trigger if exists trg_attendance_updated_at on public.attendance;
 create trigger trg_attendance_updated_at
