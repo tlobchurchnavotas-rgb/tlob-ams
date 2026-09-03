@@ -22,6 +22,7 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, vis
   const [attendanceListTab, setAttendanceListTab] = useState("members");
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [templateToDelete, setTemplateToDelete] = useState(null);
+  const [eventToDelete, setEventToDelete] = useState(null);
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth());
 
@@ -143,9 +144,17 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, vis
     } catch {}
   };
 
-  const handleDelete = async id => {
+  const handleDelete = id => {
+    const event = events.find(e => e.id === id);
+    if (event) setEventToDelete(event);
+  };
+
+  const confirmDeleteEvent = async () => {
+    if (!eventToDelete) return;
+    const { id } = eventToDelete;
     setEvents(prev => prev.filter(e => e.id !== id));
     showNotif("Event deleted", "warning");
+    setEventToDelete(null);
     try {
       await recordAuditLog({
         actor: currentUser,
@@ -468,7 +477,7 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, vis
             No events in {monthLong} {selectedYear}.
           </div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,392px))", justifyContent: "start", alignItems: "start", gap: 22 }}>
             {orderedWeeksAsc(monthGroup.weeks).map(([weekLabel, weekEvents]) => (
               <div key={weekLabel} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 <div
@@ -483,7 +492,7 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, vis
                 >
                   {weekLabel}
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(270px,1fr))", gap: 14 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                   {weekEvents.map((ev, idx) => renderEventCard(ev, idx))}
                 </div>
               </div>
@@ -708,6 +717,24 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, vis
             <div style={{ display: "flex", gap: 9, justifyContent: "flex-end" }}>
               <button className="btn" onClick={() => setShowConfirmDelete(false)} style={{ background: theme.surface2, color: theme.text, padding: "8px 16px", borderRadius: 8, fontSize: 13 }}>Cancel</button>
               <button className="btn" onClick={confirmDeleteTemplate} style={{ background: theme.danger, color: "white", padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 500 }}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Event Confirmation Modal */}
+      {eventToDelete && (
+        <div className="modal-overlay" onClick={() => setEventToDelete(null)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 16, padding: 26, width: "100%", maxWidth: 360 }}>
+            <div style={{ marginBottom: 20 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Delete Event?</h2>
+              <p style={{ fontSize: 13, color: theme.textMuted, margin: "8px 0 0 0" }}>
+                Delete <strong style={{ color: theme.text }}>{eventToDelete.name}</strong>? This action cannot be undone.
+              </p>
+            </div>
+            <div style={{ display: "flex", gap: 9, justifyContent: "flex-end" }}>
+              <button className="btn" onClick={() => setEventToDelete(null)} style={{ background: theme.surface2, color: theme.text, padding: "8px 16px", borderRadius: 8, fontSize: 13 }}>Cancel</button>
+              <button className="btn" onClick={confirmDeleteEvent} style={{ background: theme.danger, color: "white", padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 500 }}>Delete</button>
             </div>
           </div>
         </div>
