@@ -300,9 +300,10 @@ export default function TLOBApp() {
       completionPin={completionPin}
       theme={theme}
       onExit={async (nextView) => {
-        try { await document.exitFullscreen?.(); } catch {}
         setKioskMode(false);
-        if (nextView) setActiveView(nextView);
+        setProfileMember(null);
+        setActiveView(nextView || "scanner");
+        try { await document.exitFullscreen?.(); } catch {}
       }}
       showNotif={showNotif}
       initialEvent={kioskEvent}
@@ -310,7 +311,7 @@ export default function TLOBApp() {
   );
 
   return (
-    <div style={{ display: "flex", height: "100vh", background: theme.bg, color: theme.text, fontFamily: "'DM Sans','Segoe UI',sans-serif", overflow: "hidden", transition: "background .3s,color .3s" }}>
+    <div className="app-shell" style={{ display: "flex", height: "100vh", background: theme.bg, color: theme.text, fontFamily: "'DM Sans','Segoe UI',sans-serif", overflow: "hidden", transition: "background .3s,color .3s" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
         *{box-sizing:border-box;margin:0;padding:0;}
@@ -355,10 +356,49 @@ export default function TLOBApp() {
         input[type=text],input[type=password],input[type=tel],input[type=date],input[type=time],input[type=email],select,textarea{width:100%;padding:10px 13px;background:${theme.surface2};border:1.5px solid ${theme.border};border-radius:10px;color:${theme.text};font-size:14px;outline:none;transition:border-color .2s,box-shadow .2s;}
         input:focus,select:focus,textarea:focus{border-color:#6366f1 !important;box-shadow:0 0 0 3px rgba(99,102,241,.15);}
         label{display:block;font-size:11px;font-weight:700;color:${theme.textMuted};margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;}
+        .app-sidebar,.app-main-column,.app-header,.app-main-content{min-width:0;}
+        .app-header-title{min-width:0;}
+        .app-header-title h1,.app-header-title div{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+        .app-main-content{overscroll-behavior:contain;}
+        .table-scroll{width:100%;overflow-x:auto !important;overflow-y:hidden;}
+        .table-scroll table{min-width:680px;}
+        .dashboard-chart-grid,.dashboard-trend-grid,.dashboard-two-col,.dashboard-three-col,.responsive-form-grid,.responsive-modal-grid,.profile-content-grid,.profile-stats-grid,.analytics-comparison-grid{min-width:0;}
+        @media (max-width:1100px){
+          .app-sidebar{width:62px !important;min-width:62px !important;}
+          .app-header{height:auto !important;min-height:62px;padding:10px 16px !important;gap:8px !important;flex-wrap:wrap;}
+          .app-header-title{flex:1 1 220px;}
+          .app-header-title h1{font-size:16px !important;}
+          .app-header-title div{font-size:10px !important;}
+          .app-header-action{font-size:0 !important;padding:8px !important;gap:0 !important;}
+          .app-profile-chip{padding:5px !important;}
+          .app-profile-details{display:none;}
+          .app-main-content{padding:16px !important;}
+          .dashboard-chart-grid{grid-template-columns:repeat(2,minmax(0,1fr)) !important;}
+          .dashboard-three-col{grid-template-columns:repeat(2,minmax(0,1fr)) !important;}
+          .profile-content-grid{grid-template-columns:1fr !important;}
+          .profile-header-row{flex-wrap:wrap;align-items:flex-start !important;}
+          .profile-header-row > div:nth-child(2){min-width:180px;flex:1 1 220px;}
+          .profile-header-row > div:last-child{margin-left:auto;}
+        }
+        @media (max-width:800px){
+          .app-header{padding:8px 12px !important;}
+          .app-header-title{order:2;flex-basis:calc(100% - 48px);}
+          .app-header-title h1{font-size:15px !important;}
+          .app-header-title div{display:none;}
+          .app-header-action{order:3;}
+          .app-header .app-sync-status{order:4;margin-left:auto;}
+          .app-main-content{padding:12px !important;}
+          .dashboard-chart-grid,.dashboard-trend-grid,.dashboard-two-col,.dashboard-three-col,.responsive-form-grid,.responsive-modal-grid,.profile-stats-grid{grid-template-columns:1fr !important;}
+          .analytics-comparison-grid{grid-template-columns:1fr !important;}
+          .analytics-comparison-grid > [style*="grid-column"]{grid-column:span 1 !important;}
+          .table-scroll table{min-width:620px;}
+          .modal-overlay{padding:12px;}
+          .modal-box{max-width:100% !important;}
+        }
       `}</style>
 
       {/* Sidebar */}
-      <aside data-theme={darkMode ? "dark" : "light"} style={{ width: sidebarOpen ? 236 : 62, minWidth: sidebarOpen ? 236 : 62, background: darkMode ? "linear-gradient(180deg, #1f387c 0%, #192852 100%)" : "linear-gradient(180deg, #1e4caf 0%, #2890c9 100%)", borderRight: `1px solid ${darkMode ? theme.border : "rgba(255,255,255,.15)"}`, display: "flex", flexDirection: "column", transition: "width .22s cubic-bezier(.4,0,.2,1),min-width .22s", overflow: "hidden", zIndex: 10, boxShadow: darkMode ? "none" : "6px 0 30px rgba(79,70,229,.25)" }}>
+      <aside className="app-sidebar" data-theme={darkMode ? "dark" : "light"} style={{ width: sidebarOpen ? 236 : 62, minWidth: sidebarOpen ? 236 : 62, background: darkMode ? "linear-gradient(180deg, #1f387c 0%, #192852 100%)" : "linear-gradient(180deg, #1e4caf 0%, #2890c9 100%)", borderRight: `1px solid ${darkMode ? theme.border : "rgba(255,255,255,.15)"}`, display: "flex", flexDirection: "column", transition: "width .22s cubic-bezier(.4,0,.2,1),min-width .22s", overflow: "hidden", zIndex: 10, boxShadow: darkMode ? "none" : "6px 0 30px rgba(79,70,229,.25)" }}>
         <div style={{ padding: "14px 12px", borderBottom: `1px solid ${darkMode ? theme.border : "rgba(255,255,255,.1)"}`, display: "flex", alignItems: "center", gap: 10, minHeight: 68 }}>
           <img src={CHURCH_LOGO_SRC} alt="TLOB Logo" style={{ width: 40, height: 40, borderRadius: "50%", flexShrink: 0, objectFit: "cover", boxShadow: darkMode ? "0 2px 8px rgba(0,0,0,.2)" : "0 4px 16px rgba(255,255,255,.3)", border: darkMode ? `3px solid ${theme.border}` : `3px solid rgba(255,255,255,.25)` }} />
           {sidebarOpen && <div><div style={{ fontWeight: 800, fontSize: 12, letterSpacing: "-.02em", whiteSpace: "nowrap", color: darkMode ? theme.text : "#ffffff", lineHeight: 1.2, textShadow: darkMode ? "none" : "0 1px 3px rgba(0,0,0,.2)" }}>THE LORD OUR BANNER</div><div style={{ fontSize: 10, color: darkMode ? theme.textMuted : "rgba(255,255,255,.95)", textShadow: darkMode ? "none" : "0 1px 2px rgba(0,0,0,.15)" }}>Attendance Management System</div></div>}
@@ -401,8 +441,8 @@ export default function TLOBApp() {
       </aside>
 
       {/* Main */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        <header style={{ height: 62, background: theme.surface, borderBottom: `1px solid ${theme.border}`, display: "flex", alignItems: "center", padding: "0 22px", gap: 14, flexShrink: 0 }}>
+      <div className="app-main-column" style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <header className="app-header" style={{ height: 62, background: theme.surface, borderBottom: `1px solid ${theme.border}`, display: "flex", alignItems: "center", padding: "0 22px", gap: 14, flexShrink: 0 }}>
           <button className="btn" onClick={() => setSidebarOpen(!sidebarOpen)} style={{ background: theme.surface2, color: theme.textMuted, padding: 8, borderRadius: 8, display: "flex" }}>
             <Icon name="menu" size={18} />
           </button>
@@ -411,7 +451,7 @@ export default function TLOBApp() {
               <Icon name="back" size={14} /> Back
             </button>
           )}
-          <div style={{ flex: 1 }}>
+          <div className="app-header-title" style={{ flex: 1 }}>
             <h1 style={{ fontSize: 18, fontWeight: 1000, letterSpacing: "-.02em", color: theme.text }}>
               {profileMember ? "Member Profile" : { dashboard: "Dashboard", members: "Members", events: "Events", scanner: "QR Scanner", attendance: "Attendance Reports", attendanceAnalytics: "Attendance Analytics", memberHistory: "Member Attendance History", accountManagement: "Account Management", auditLogs: "Audit Logs", usermgmt: "User Management", visitors: "Visitor Tracking", celebrations: "Celebrations", adminSettings: "Settings" }[activeView]}
             </h1>
@@ -420,12 +460,12 @@ export default function TLOBApp() {
             </div>
           </div>
           {syncUi && (
-            <div style={{ fontSize: 11, fontWeight: 800, padding: "6px 10px", borderRadius: 999, background: syncUi.bg, color: syncUi.color, border: `1px solid ${theme.border}` }}>
+            <div className="app-sync-status" style={{ fontSize: 11, fontWeight: 800, padding: "6px 10px", borderRadius: 999, background: syncUi.bg, color: syncUi.color, border: `1px solid ${theme.border}` }}>
               {syncUi.label}
             </div>
           )}
           <button
-            className="btn"
+            className="btn app-header-action"
             onClick={() => setRemoteOpen(true)}
             title="Remote access (iPad / phone)"
             style={{
@@ -444,7 +484,7 @@ export default function TLOBApp() {
             <Icon name="qr" size={16} /> Remote Connection
           </button>
           <button
-            className="btn"
+            className="btn app-header-action"
             onClick={toggleFullscreen}
             title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
             style={{
@@ -462,7 +502,7 @@ export default function TLOBApp() {
           >
             <Icon name={isFullscreen ? "fullscreenExit" : "fullscreen"} size={16} /> {isFullscreen ? "Exit" : "Fullscreen"}
           </button>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, background: theme.surface2, border: `1px solid ${theme.border}`, borderRadius: 9, padding: "6px 12px" }}>
+          <div className="app-profile-chip" style={{ display: "flex", alignItems: "center", gap: 10, background: theme.surface2, border: `1px solid ${theme.border}`, borderRadius: 9, padding: "6px 12px" }}>
             {currentUser.avatarUrl ? (
               <img
                 src={currentUser.avatarUrl}
@@ -472,14 +512,14 @@ export default function TLOBApp() {
             ) : (
               <div style={{ width: 28, height: 28, borderRadius: "50%", background: "linear-gradient(135deg,#6366f1,#06b6d4)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, color: "white" }}>{currentUser.name[0]}</div>
             )}
-            <div>
+            <div className="app-profile-details">
               <div style={{ fontSize: 12, fontWeight: 700, color: theme.text, lineHeight: 1.2 }}>{currentUser.name}</div>
               <div style={{ fontSize: 10, color: theme.accent, fontWeight: 600 }}>{currentUser.role}</div>
             </div>
           </div>
         </header>
 
-        <main style={{ flex: 1, overflow: "auto", padding: 22, background: theme.bg }}>
+        <main className="app-main-content" style={{ flex: 1, overflow: "auto", padding: 22, background: theme.bg }}>
           {profileMember
             ? <MemberProfile member={profileMember} members={members} attendance={attendance} events={events} theme={theme} onClose={() => setProfileMember(null)} showNotif={showNotif} />
             : activeView === "dashboard" ? <DashboardView members={members} events={events} attendance={attendance} theme={theme} />

@@ -185,7 +185,7 @@ export default function RemoteAccessModal({ theme, onClose, title = "Remote Acce
           </button>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 220px", gap: 16, alignItems: "start" }}>
+        <div className="responsive-modal-grid" style={{ display: "grid", gridTemplateColumns: "1fr 220px", gap: 16, alignItems: "start" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <div>
               <label>Device URL</label>
@@ -228,7 +228,7 @@ export default function RemoteAccessModal({ theme, onClose, title = "Remote Acce
               </div>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 120px", gap: 10 }}>
+            <div className="responsive-modal-grid" style={{ display: "grid", gridTemplateColumns: "1fr 120px", gap: 10 }}>
               <div>
                 <label>Host / IP</label>
                 <input type="text" value={host} onChange={(e) => setHost(e.target.value)} placeholder="e.g. 192.168.1.29" />

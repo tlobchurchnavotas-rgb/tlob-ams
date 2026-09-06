@@ -232,7 +232,7 @@ function MemberProfile({ member, attendance, events, members, theme, showNotif }
       {/* Profile Header */}
       <div className="card" style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: "hidden" }}>
         <div style={{ background: "linear-gradient(135deg, rgba(99,102,241,.18), rgba(6,182,212,.1))", padding: "28px 28px 0" }}>
-          <div style={{ display: "flex", gap: 20, alignItems: "flex-end" }}>
+          <div className="profile-header-row" style={{ display: "flex", gap: 20, alignItems: "flex-end" }}>
             <div style={{ position: "relative" }}>
               <Avatar member={member} size={88} style={{ border: `4px solid ${theme.surface}` }} />
               <div style={{ position: "absolute", bottom: 2, right: 2, width: 18, height: 18, borderRadius: "50%", background: member.status === "Active" ? theme.success : theme.danger, border: `3px solid ${theme.surface}` }} />
@@ -256,10 +256,10 @@ function MemberProfile({ member, attendance, events, members, theme, showNotif }
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: showQRCard ? "2fr 1fr" : "1fr", gap: 18 }}>
+      <div className="profile-content-grid" style={{ display: "grid", gridTemplateColumns: showQRCard ? "2fr 1fr" : "1fr", gap: 18 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
           {/* Stats */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12 }}>
+          <div className="profile-stats-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12 }}>
             {[
               { label: "Events Attended", value: memberAtt.length, color: theme.accent },
               { label: "Attendance Rate", value: `${attendanceRate}%`, color: theme.success },
@@ -277,7 +277,7 @@ function MemberProfile({ member, attendance, events, members, theme, showNotif }
             <div style={{ padding: "16px 20px", borderBottom: `1px solid ${theme.border}`, fontWeight: 600, fontSize: 14 }}>Attendance History</div>
             {memberAtt.length === 0
               ? <div style={{ padding: 30, textAlign: "center", color: theme.textMuted, fontSize: 13 }}>No attendance records</div>
-              : <table>
+              : <div className="table-scroll"><table>
                 <thead><tr><th>#</th><th>Event</th><th>Date</th><th>Check-in Time</th></tr></thead>
                 <tbody>
                   {memberAtt.map((a, i) => {
@@ -292,7 +292,7 @@ function MemberProfile({ member, attendance, events, members, theme, showNotif }
                     );
                   })}
                 </tbody>
-              </table>}
+              </table></div>}
           </div>
         </div>
 

@@ -380,10 +380,10 @@ function DashboardView({ members, events, attendance, theme }) {
           (() => {
             const c = d.color ?? (colors && colors[i % colors.length]) ?? color;
             return (
-          <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+          <div key={i} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
             <span style={{ fontSize: 9, fontWeight: 600, color: theme.text, opacity: d.value > 0 ? 1 : 0 }}>{d.value}</span>
             <div style={{ width: "100%", borderRadius: "4px 4px 0 0", height: `${(d.value / max) * 64}px`, minHeight: d.value > 0 ? 6 : 2, background: `linear-gradient(180deg,${c},${c}99)`, transition: "height .6s ease" }} />
-            <span style={{ fontSize: 9, color: theme.textMuted, whiteSpace: "nowrap" }}>{d.label}</span>
+            <span style={{ width: "100%", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", fontSize: 9, color: theme.textMuted, whiteSpace: "nowrap", textAlign: "center" }}>{d.label}</span>
           </div>
             );
           })()
@@ -425,23 +425,23 @@ function DashboardView({ members, events, attendance, theme }) {
       </div>
 
       {/* Charts row — REAL DATA */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 260px", gap: 14 }}>
-        <div className="card" style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 13, padding: 18 }}>
+      <div className="dashboard-chart-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
+        <div className="card" style={{ minWidth: 0, background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 13, padding: 18 }}>
           <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 2 }}>Attendance per Event</div>
           <div style={{ fontSize: 11, color: theme.textMuted, marginBottom: 12 }}>Actual check-in counts</div>
           <RealBar data={eventChartData} color={theme.accent} colors={barPalette} />
         </div>
-        <div className="card" style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 13, padding: 18 }}>
+        <div className="card" style={{ minWidth: 0, background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 13, padding: 18 }}>
           <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 2 }}>Members per Ministry</div>
           <div style={{ fontSize: 11, color: theme.textMuted, marginBottom: 12 }}>Current distribution</div>
           <RealBar data={ministryData} color={theme.accent2} colors={barPalette} />
         </div>
-        <div className="card" style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 13, padding: 18 }}>
+        <div className="card" style={{ minWidth: 0, background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 13, padding: 18 }}>
           <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 2 }}>Members per Age Group</div>
           <div style={{ fontSize: 11, color: theme.textMuted, marginBottom: 12 }}>Kids · Youth · Young Pro · Adult · Senior</div>
           <RealBar data={ageGroupData} color={theme.warning} colors={barPalette} />
         </div>
-        <div className="card" style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 13, padding: 18 }}>
+        <div className="card" style={{ minWidth: 0, background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 13, padding: 18 }}>
           <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 3 }}>Member Status</div>
           <div style={{ fontSize: 11, color: theme.textMuted, marginBottom: 10 }}>Active vs Inactive</div>
           <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}><DonutChart filled={active} total={total} color={theme.success} /></div>
@@ -453,7 +453,7 @@ function DashboardView({ members, events, attendance, theme }) {
       </div>
 
       {/* Attendance trends */}
-      <div style={{ display: "grid", gridTemplateColumns: ".5fr 1fr 1fr", gap: 4, alignItems: "center" }}>
+      <div className="dashboard-trend-grid" style={{ display: "grid", gridTemplateColumns: ".5fr 1fr 1fr", gap: 4, alignItems: "center" }}>
         <SearchableEventSelect
           events={eventGroups}
           value={sharedEventFilter}
@@ -494,7 +494,7 @@ function DashboardView({ members, events, attendance, theme }) {
           </div>
         ))}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+      <div className="dashboard-two-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
         <div className="card" style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 13, padding: 18 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
             <div style={{ fontWeight: 700, fontSize: 15 }}>Weekly Attendance</div>
@@ -611,7 +611,7 @@ function DashboardView({ members, events, attendance, theme }) {
       </div>
 
       {/* Bottom row */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
+      <div className="dashboard-three-col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
         <div className="card" style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 13, padding: 18 }}>
           <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 14 }}>Recent Check-ins</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

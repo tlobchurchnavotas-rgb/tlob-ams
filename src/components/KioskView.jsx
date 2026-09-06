@@ -26,7 +26,12 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setMe
   // iPad 10th gen landscape is 1024px wide; treat it as "narrow" for a better fit.
   const [isNarrow, setIsNarrow] = useState(() => (typeof window !== "undefined" ? window.innerWidth <= 1100 : false));
   const [isShort, setIsShort] = useState(() => (typeof window !== "undefined" ? window.innerHeight <= 760 : false));
+  const [viewport, setViewport] = useState(() => ({
+    width: typeof window !== "undefined" ? window.innerWidth : 1280,
+    height: typeof window !== "undefined" ? window.innerHeight : 800,
+  }));
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [kioskZoom, setKioskZoom] = useState(1);
   const [showRegisterQr, setShowRegisterQr] = useState(false);
   const [showMemberClaimQr, setShowMemberClaimQr] = useState(false);
   const [showMemberCardDirectory, setShowMemberCardDirectory] = useState(false);
@@ -411,6 +416,7 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setMe
     const onResize = () => {
       setIsNarrow(window.innerWidth <= 1100);
       setIsShort(window.innerHeight <= 760);
+      setViewport({ width: window.innerWidth, height: window.innerHeight });
     };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
@@ -455,11 +461,17 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setMe
   const shellPad = isNarrow ? 14 : 30;
   const headerPadY = isNarrow ? 12 : 16;
   const logoSize = isNarrow ? 48 : 64;
-  const cameraHeight = isShort ? 220 : isNarrow ? 260 : 300;
-  const sidePanelWidth = typeof window !== "undefined" && window.innerWidth <= 1280 ? 300 : 340;
+  const sidePanelWidth = viewport.width <= 1280 ? 300 : 340;
+  const scanMaxWidth = isNarrow
+    ? Math.min(720, Math.max(280, viewport.width - shellPad * 2))
+    : Math.min(500, Math.max(300, viewport.width - sidePanelWidth - 48));
+  const cameraHeight = Math.max(180, Math.min(isShort ? 220 : isNarrow ? 260 : 300, Math.round(scanMaxWidth * 9 / 16)));
+  const changeKioskZoom = (delta) => {
+    setKioskZoom((current) => Math.min(1.3, Math.max(0.8, Number((current + delta).toFixed(1)))));
+  };
 
   return (
-    <div style={{ position: "absolute", inset: 0, background: theme.bg, display: "flex", flexDirection: "column", fontFamily: "'DM Sans',sans-serif", color: theme.text, overflow: "hidden" }}>
+    <div style={{ position: "absolute", inset: 0, background: theme.bg, display: "flex", flexDirection: "column", fontFamily: "'DM Sans',sans-serif", color: theme.text, overflow: "auto", zoom: kioskZoom }}>
       <video
         autoPlay
         muted
@@ -488,6 +500,11 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setMe
             <div style={{ fontSize: 26, fontWeight: 800, color: theme.accent, lineHeight: 1 }}>{sessionCount}</div>
             <div style={{ fontSize: 9, color: theme.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".06em" }}>Attendance</div>
           </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, background: theme.surface2, border: `1px solid ${theme.border}`, borderRadius: 10, padding: 4 }} aria-label="Kiosk zoom controls">
+            <button className="btn" type="button" onClick={() => changeKioskZoom(-0.1)} disabled={kioskZoom <= 0.8} title="Zoom out" aria-label="Zoom out" style={{ background: "transparent", color: theme.textMuted, borderRadius: 8, padding: "7px 10px", fontSize: 16, lineHeight: 1, opacity: kioskZoom <= 0.8 ? .45 : 1 }}>−</button>
+            <span style={{ minWidth: 48, textAlign: "center", fontSize: 12, fontWeight: 800, color: theme.text }}>{Math.round(kioskZoom * 100)}%</span>
+            <button className="btn" type="button" onClick={() => changeKioskZoom(0.1)} disabled={kioskZoom >= 1.3} title="Zoom in" aria-label="Zoom in" style={{ background: "transparent", color: theme.textMuted, borderRadius: 8, padding: "7px 10px", fontSize: 16, lineHeight: 1, opacity: kioskZoom >= 1.3 ? .45 : 1 }}>+</button>
+          </div>
           <button
             className="btn"
             onClick={() => setSoundEnabled(!soundEnabled)}
@@ -504,18 +521,19 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setMe
           >
             <Icon name={isFullscreen ? "fullscreenExit" : "fullscreen"} size={16} /> {isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
           </button>
-          <button onClick={onExit} style={{ background: theme.surface2, color: theme.textMuted, border: `1px solid ${theme.border}`, borderRadius: 10, padding: "8px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>✕ Exit Kiosk</button>
+          <button onClick={async () => { await stopCamera(); onExit(); }} style={{ background: theme.surface2, color: theme.textMuted, border: `1px solid ${theme.border}`, borderRadius: 10, padding: "8px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>✕ Exit Kiosk</button>
         </div>
       </div>
 
       <div style={{ position: "relative", zIndex: 2, flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: isNarrow ? "1fr" : `1fr ${sidePanelWidth}px`, gridTemplateRows: isNarrow ? "auto 1fr" : undefined, overflow: "hidden" }}>
         {/* Main scan area */}
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: isNarrow ? "flex-start" : "center", padding: isNarrow ? 14 : 24, gap: 10, overflowY: (isNarrow || scanStatus?.hold) ? "auto" : "hidden" }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", padding: isNarrow ? "14px 14px 88px" : "24px 24px 88px", gap: 10, overflowY: "auto", minWidth: 0, overscrollBehavior: "contain" }}>
+          <div style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 10, margin: "auto 0" }}>
           {/* Status card */}
           {scanStatus ? (
-            <div style={{ animation: "pop .35s ease", background: `${SC[scanStatus.type]}38`, border: `2px solid ${SC[scanStatus.type]}40`, borderRadius: 22, padding: isNarrow ? "20px 18px" : "28px 32px", textAlign: "center", width: "100%", maxWidth: isNarrow ? 720 : 520 }}>
+            <div style={{ animation: "pop .35s ease", background: `${SC[scanStatus.type]}38`, border: `2px solid ${SC[scanStatus.type]}40`, borderRadius: 22, padding: isNarrow ? "20px 18px" : "28px 32px", textAlign: "center", width: "100%", maxWidth: scanMaxWidth, overflowWrap: "anywhere" }}>
               <div style={{ fontSize: scanStatus.hold ? 40 : 64, marginBottom: 10 }}>{scanStatus.hold === "member" ? "🎉" : SICO[scanStatus.type]}</div>
-              <div style={{ fontSize: 26, fontWeight: 800, color: SC[scanStatus.type], marginBottom: 6 }}>{scanStatus.member?.name}</div>
+              <div style={{ fontSize: isNarrow ? 21 : 26, fontWeight: 800, color: SC[scanStatus.type], marginBottom: 6, overflowWrap: "anywhere" }}>{scanStatus.member?.name}</div>
               <div style={{ fontSize: 16, color: SC[scanStatus.type], fontWeight: 600 }}>
                 {scanStatus.hold === "member" ? "You're now a member!" : scanStatus.hold === "visitor" ? "✓ Attendance Recorded" : SMSG[scanStatus.type]}
               </div>
@@ -550,7 +568,7 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setMe
               )}
             </div>
           ) : (
-            <div style={{ background: theme.surface, border: `2px dashed ${theme.border}`, borderRadius: 22, padding: isNarrow ? "22px 18px" : "32px 42px", textAlign: "center", width: "100%", maxWidth: isNarrow ? 720 : 500 }}>
+            <div style={{ background: theme.surface, border: `2px dashed ${theme.border}`, borderRadius: 22, padding: isNarrow ? "22px 18px" : "32px 42px", marginTop: isNarrow ? 10 : 15, textAlign: "center", width: "100%", maxWidth: scanMaxWidth }}>
               {slides.length > 0 ? (
                 <img src={slides[slideIdx]} alt="Greeting" style={{ maxWidth: 100, maxHeight: 120, marginBottom: 10, objectFit: "contain" }} />
               ) : (
@@ -563,7 +581,7 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setMe
           )}
 
           {/* Event select */}
-          <div style={{ width: "100%", maxWidth: 500 }}>
+          <div style={{ width: "100%", maxWidth: scanMaxWidth }}>
             <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 8, display: "block" }}>Active Event</label>
             <select value={selEv} onChange={e => setSelEv(e.target.value)} style={{ width: "100%", padding: "13px 16px", background: theme.surface2, border: `1.5px solid ${theme.border}`, borderRadius: 12, color: theme.text, fontSize: 15, outline: "none", fontFamily: "inherit" }}>
               <option value="">— Select Event —</option>
@@ -573,7 +591,7 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setMe
 
           {/* Camera view */}
           {camState !== "idle" && (
-            <div style={{ width: "100%", maxWidth: isNarrow ? 720 : 500, marginTop: 16 }}>
+            <div style={{ width: "100%", maxWidth: scanMaxWidth, marginTop: 16 }}>
               {camState === "loading" && <div style={{ textAlign: "center", padding: 20 }}><div style={{ width: 32, height: 32, border: `3px solid ${theme.border}`, borderTopColor: theme.accent, borderRadius: "50%", animation: "spin .7s linear infinite", margin: "0 auto 10px" }} /><div style={{ fontSize: 12, color: theme.textMuted }}>Starting camera…</div></div>}
               {camState === "error" && (
                 <div style={{ textAlign: "center", padding: 16, color: theme.danger, background: `${theme.danger}10`, borderRadius: 12, border: `1px solid ${theme.danger}25` }}>
@@ -599,17 +617,19 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setMe
           )}
 
           {/* Input row */}
-          <div style={{ width: "100%", maxWidth: isNarrow ? 720 : 500, display: "flex", gap: 12, flexDirection: isNarrow ? "column" : "row" }}>
+          <div style={{ width: "100%", maxWidth: scanMaxWidth, display: "flex", gap: 12, flexDirection: isNarrow ? "column" : "row" }}>
             <input ref={inputRef} type="text" value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && processScan(input)} placeholder="Scan QR or type Member/Visitor ID (e.g. M001)…"
               style={{ flex: 1, padding: "14px 16px", background: theme.surface2, border: `1.5px solid ${theme.border}`, borderRadius: 12, color: theme.text, fontSize: 15, outline: "none", fontFamily: "inherit" }} />
             <button onClick={() => processScan(input)} disabled={!selEv || !input.trim()} style={{ background: theme.accent, color: "white", border: "none", borderRadius: 12, padding: isNarrow ? "12px 16px" : "0 24px", height: isNarrow ? 46 : 48, fontSize: 15, fontWeight: 700, cursor: (!selEv || !input.trim()) ? "not-allowed" : "pointer", opacity: (!selEv || !input.trim()) ? .45 : 1, fontFamily: "inherit", whiteSpace: "nowrap" }}>Check In</button>
           </div>
 
           {/* Camera controls */}
-          <div style={{ display: "flex", gap: 12 }}>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center", paddingBottom: 12 }}>
             {camState === "idle" && <button onClick={startCamera} style={{ background: `${theme.accent2}15`, color: theme.accent2, border: `1px solid ${theme.accent2}30`, borderRadius: 12, padding: "11px 22px", fontSize: 15, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", gap: 8 }}><Icon name="camera" size={16} />📷 Camera Scanner</button>}
             {camState !== "idle" && <button onClick={stopCamera} style={{ background: `${theme.danger}15`, color: theme.danger, border: `1px solid ${theme.danger}25`, borderRadius: 12, padding: "11px 20px", fontSize: 15, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", gap: 8 }}><Icon name="close" size={16} />Stop Camera</button>}
             {activeEv?.status === "Active" && <button onClick={openCompletionPin} style={{ background: `${theme.success}18`, color: theme.success, border: `1px solid ${theme.success}35`, borderRadius: 12, padding: "11px 20px", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", gap: 8 }}><Icon name="check" size={16} />Complete Attendance</button>}
+          </div>
+
           </div>
 
         </div>
@@ -668,9 +688,9 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setMe
           <button
             type="button"
             onClick={() => { setMemberCardSearch(""); setShowMemberCardDirectory(true); }}
-            style={{ background: theme.surface2, color: theme.text, border: `1px solid ${theme.border}`, borderRadius: 10, padding: "10px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}
+            style={{ background: theme.surface2, color: theme.text, border: `2px solid ${theme.border}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, fontWeight: 750, height: 42, marginBottom: -8, cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}
           >
-            <Icon name="qr" size={16} /> Member cards
+            <Icon name="qr" size={20} /> Member Virtual ID
           </button>
         </div>
       </div>
@@ -767,7 +787,7 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setMe
             style={{ background: theme.surface, color: theme.text, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 22, width: "calc(100% - 32px)", maxWidth: 420, maxHeight: "80vh", overflowY: "auto", fontFamily: "'DM Sans', sans-serif", boxSizing: "border-box" }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-              <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>Member cards</h2>
+              <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>Member Virtual ID</h2>
               <button className="btn" onClick={() => setShowMemberCardDirectory(false)} style={{ background: "transparent", color: theme.textMuted, padding: 4 }} aria-label="Close"><Icon name="close" size={18} /></button>
             </div>
             <div style={{ fontSize: 12, color: theme.textMuted, marginBottom: 14 }}>Choose a member to show their card QR for downloading.</div>

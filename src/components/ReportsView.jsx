@@ -235,7 +235,7 @@ function ReportsView({ attendance, members, events, theme, showNotif }) {
           <span><strong style={{ color: theme.accent, fontSize: 18 }}>{weeklySummary.length}</strong> Total Weeks</span>
         </div>
         {selectedMonths.length > 0 && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 14, marginTop: 20 }}>
+          <div className="dashboard-two-col" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 14, marginTop: 20 }}>
             {selectedMonths.slice().sort().map((key) => {
               const monthRows = weeklySummary.filter((row) => row.monthKey === key);
               return (

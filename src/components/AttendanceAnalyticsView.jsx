@@ -401,7 +401,7 @@ function AttendanceAnalyticsView({ attendance, members, events, theme }) {
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(12, 1fr)", gap: 12, marginTop: 14 }}>
+        <div className="analytics-comparison-grid" style={{ display: "grid", gridTemplateColumns: "repeat(12, 1fr)", gap: 12, marginTop: 14 }}>
           <div style={{ gridColumn: "span 6", background: theme.surface2, border: `1px solid ${theme.border}`, borderRadius: 12, padding: 14 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
               <div style={{ fontWeight: 900, fontSize: 12, color: theme.textMuted, letterSpacing: ".08em", textTransform: "uppercase" }}>Week A</div>
@@ -519,7 +519,7 @@ function AttendanceAnalyticsView({ attendance, members, events, theme }) {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(12, 1fr)", gap: 12 }}>
+      <div className="analytics-comparison-grid" style={{ display: "grid", gridTemplateColumns: "repeat(12, 1fr)", gap: 12 }}>
         <div style={{ gridColumn: "span 6" }}>
           <StatCard
             title="This week attendance"

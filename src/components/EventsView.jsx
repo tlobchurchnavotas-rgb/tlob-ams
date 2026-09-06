@@ -756,7 +756,7 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, vis
                   {["Weekly Service", "Prayer Meeting", "Youth Ministry", "Children's Church", "Special Event"].map(t => <option key={t}>{t}</option>)}
                 </select>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div className="responsive-modal-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <div><label>Date *</label><input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} /></div>
                 <div><label>Time</label><input type="time" value={form.time} onChange={e => setForm(f => ({ ...f, time: e.target.value }))} /></div>
               </div>

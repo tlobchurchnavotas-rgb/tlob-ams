@@ -551,7 +551,7 @@ function MembersView({ members, setMembers, events, theme, showNotif, currentUse
         </div>
       </div>
 
-      <div className="card" style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 13, overflow: "hidden" }}>
+      <div className="card table-scroll" style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 13, overflow: "hidden" }}>
         <table>
           <thead><tr><th>ID</th><th>Name</th><th>Contact</th><th>Ministry</th><th>Age Group</th><th>Status</th><th>Joined</th><th>Actions</th></tr></thead>
           <tbody>
@@ -631,7 +631,7 @@ function MembersView({ members, setMembers, events, theme, showNotif, currentUse
                 {form.photo && <button className="btn" onClick={() => setForm(f => ({ ...f, photo: null }))} style={{ marginLeft: 8, background: "transparent", color: theme.danger, fontSize: 11, padding: 0 }}>Remove</button>}
               </div>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 13 }}>
+            <div className="responsive-form-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 13 }}>
               {[["Full Name *", "name", "text"], ["Contact Info", "contact", "text"]].map(([lbl, key, type]) => (
                 <div key={key}>
                   <label>{lbl}</label>
@@ -683,7 +683,7 @@ function MembersView({ members, setMembers, events, theme, showNotif, currentUse
               </div>
               <div style={{ gridColumn: "1 / -1" }}>
                 <label>Ministry / Group</label>
-                <div style={{ border: `1px solid ${theme.border}`, borderRadius: 8, padding: 10, background: theme.surface2, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <div className="responsive-form-grid" style={{ border: `1px solid ${theme.border}`, borderRadius: 8, padding: 10, background: theme.surface2, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                   {MINISTRY_OPTIONS.map((ministry) => {
                     const checked = form.ministry.includes(ministry);
                     return (

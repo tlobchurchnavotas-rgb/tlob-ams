@@ -306,7 +306,7 @@ export default function AdminSettingsView({ theme, showNotif, currentUser, setCu
       </div>
 
       <div className="card" style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, padding: 18 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "140px 1fr", gap: 18, alignItems: "start" }}>
+        <div className="responsive-form-grid" style={{ display: "grid", gridTemplateColumns: "140px 1fr", gap: 18, alignItems: "start" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <div style={{ width: 120, height: 120, borderRadius: 18, overflow: "hidden", border: `1px solid ${theme.border}`, background: theme.surface2, display: "flex", alignItems: "center", justifyContent: "center" }}>
               {avatarPreview ? (

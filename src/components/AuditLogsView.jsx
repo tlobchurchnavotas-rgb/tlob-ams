@@ -247,7 +247,7 @@ export default function AuditLogsView({ theme, showNotif }) {
         </div>
       </div>
 
-      <div className="card" style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: "hidden", width: "100%" }}>
+      <div className="card table-scroll" style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: "hidden", width: "100%" }}>
         {loading ? (
           <div style={{ padding: 26, textAlign: "center", color: theme.textMuted, fontSize: 13 }}>Loading audit logs…</div>
         ) : filteredRows.length > 0 ? (
