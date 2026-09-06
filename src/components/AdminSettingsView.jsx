@@ -179,7 +179,8 @@ export default function AdminSettingsView({ theme, showNotif, currentUser, setCu
 
     setDownloadingUpdate(true);
     try {
-      await window.tlob.downloadUpdate();
+      const result = await window.tlob.downloadUpdate();
+      if (!result?.success) throw new Error(result?.error || "Unknown download error");
       showNotif("Update downloaded! Restart the app to install.", "success");
     } catch (error) {
       showNotif(`Error downloading update: ${error?.message || "Unknown error"}`, "error");
@@ -191,7 +192,7 @@ export default function AdminSettingsView({ theme, showNotif, currentUser, setCu
   // Setup update event listeners
   useEffect(() => {
     const handleUpdateAvailable = (info) => {
-      showNotif(`Update available: ${info.version}. Downloading now...`, "info");
+      showNotif(`Update available: ${info.version}. Click Download to get it.`, "info");
     };
 
     const handleUpdateDownloaded = (info) => {
@@ -266,8 +267,8 @@ export default function AdminSettingsView({ theme, showNotif, currentUser, setCu
   const avatarPreview = form.avatarUrl?.trim() || "";
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 900, width: "100%", margin: "0 auto", boxSizing: "border-box" }}>
-      <div className="card" style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, padding: 18 }}>
+    <div className="settings-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gridTemplateAreas: '"header header" "profile public" "application public"', gap: 16, maxWidth: 1180, width: "100%", margin: "0 auto", boxSizing: "border-box", alignItems: "start" }}>
+      <div className="card" style={{ gridArea: "header", background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, padding: 18 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div>
             <div style={{ fontSize: 14, fontWeight: 800, letterSpacing: "-.01em" }}>Admin Settings</div>
@@ -305,7 +306,7 @@ export default function AdminSettingsView({ theme, showNotif, currentUser, setCu
         </div>
       </div>
 
-      <div className="card" style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, padding: 18 }}>
+      <div className="card" style={{ gridArea: "profile", background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, padding: 18 }}>
         <div className="responsive-form-grid" style={{ display: "grid", gridTemplateColumns: "140px 1fr", gap: 18, alignItems: "start" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <div style={{ width: 120, height: 120, borderRadius: 18, overflow: "hidden", border: `1px solid ${theme.border}`, background: theme.surface2, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -405,7 +406,7 @@ export default function AdminSettingsView({ theme, showNotif, currentUser, setCu
         </div>
       </div>
 
-      <div className="card" style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, padding: 18 }}>
+      <div className="card" style={{ gridArea: "public", background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, padding: 18 }}>
         <div style={{ fontSize: 14, fontWeight: 800, letterSpacing: "-.01em" }}>Public self-registration</div>
         <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 4, marginBottom: 14 }}>
           Guests can log as visitors and check in from their phone. After enough unique event visits, kiosk can convert them to members automatically. You can still convert anyone manually from Visitors.
@@ -499,7 +500,7 @@ export default function AdminSettingsView({ theme, showNotif, currentUser, setCu
         )}
       </div>
 
-      <div className="card" style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, padding: 18 }}>
+      <div className="card" style={{ gridArea: "application", background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, padding: 18 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div>
             <div style={{ fontSize: 14, fontWeight: 800, letterSpacing: "-.01em" }}>Application</div>

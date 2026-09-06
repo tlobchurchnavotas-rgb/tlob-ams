@@ -211,6 +211,7 @@ npm run electron:pack
 
 ```bash
 npm version patch
+npm run electron:publish
 npm run electron:release
 ```
 

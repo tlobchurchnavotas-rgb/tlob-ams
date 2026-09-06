@@ -232,7 +232,11 @@ ipcMain.handle("check-for-updates", async () => {
     console.log("Current App Version:", app.getVersion());
     const result = await autoUpdater.checkForUpdates();
     console.log("Update check result:", result);
-    return result;
+    return {
+      updateAvailable: Boolean(result?.isUpdateAvailable),
+      updateInfo: result?.updateInfo || result?.versionInfo || null,
+      currentVersion: app.getVersion(),
+    };
   } catch (error) {
     console.error("Update check error:", error);
     const message = String(error?.message || error);

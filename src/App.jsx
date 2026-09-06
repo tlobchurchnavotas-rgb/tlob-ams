@@ -362,7 +362,7 @@ export default function TLOBApp() {
         .app-main-content{overscroll-behavior:contain;}
         .table-scroll{width:100%;overflow-x:auto !important;overflow-y:hidden;}
         .table-scroll table{min-width:680px;}
-        .dashboard-chart-grid,.dashboard-trend-grid,.dashboard-two-col,.dashboard-three-col,.responsive-form-grid,.responsive-modal-grid,.profile-content-grid,.profile-stats-grid,.analytics-comparison-grid{min-width:0;}
+        .dashboard-chart-grid,.dashboard-trend-grid,.dashboard-two-col,.dashboard-three-col,.responsive-form-grid,.responsive-modal-grid,.profile-content-grid,.profile-stats-grid,.analytics-comparison-grid,.settings-grid{min-width:0;}
         @media (max-width:1100px){
           .app-sidebar{width:62px !important;min-width:62px !important;}
           .app-header{height:auto !important;min-height:62px;padding:10px 16px !important;gap:8px !important;flex-wrap:wrap;}
@@ -388,7 +388,7 @@ export default function TLOBApp() {
           .app-header-action{order:3;}
           .app-header .app-sync-status{order:4;margin-left:auto;}
           .app-main-content{padding:12px !important;}
-          .dashboard-chart-grid,.dashboard-trend-grid,.dashboard-two-col,.dashboard-three-col,.responsive-form-grid,.responsive-modal-grid,.profile-stats-grid{grid-template-columns:1fr !important;}
+          .dashboard-chart-grid,.dashboard-trend-grid,.dashboard-two-col,.dashboard-three-col,.responsive-form-grid,.responsive-modal-grid,.profile-stats-grid,.settings-grid{grid-template-columns:1fr !important;grid-template-areas:"header" "profile" "public" "application" !important;}
           .analytics-comparison-grid{grid-template-columns:1fr !important;}
           .analytics-comparison-grid > [style*="grid-column"]{grid-column:span 1 !important;}
           .table-scroll table{min-width:620px;}
