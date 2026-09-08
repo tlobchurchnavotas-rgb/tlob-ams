@@ -266,6 +266,10 @@ export default function App() {
                   <input id="reg-name" style={inputStyle} autoComplete="name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Visitor name" />
                 </div>
                 <div>
+                  <label htmlFor="reg-email">Email Address</label>
+                  <input id="reg-email" type="email" style={inputStyle} autoComplete="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} placeholder="you@example.com" />
+                </div>
+                <div>
                   <label htmlFor="reg-contact">Contact Number</label>
                   <input id="reg-contact" type="tel" style={inputStyle} autoComplete="tel" value={form.contact} onChange={(e) => setForm((f) => ({ ...f, contact: e.target.value }))} placeholder="09XXXXXXXXX" />
                 </div>
@@ -328,10 +332,6 @@ export default function App() {
                       )}
                     </>
                   )}
-                </div>
-                <div>
-                  <label htmlFor="reg-email">Email Address</label>
-                  <input id="reg-email" type="email" style={inputStyle} autoComplete="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} placeholder="you@example.com" />
                 </div>
                 <div>
                   <label htmlFor="reg-photo">Photo (optional, 1x1)</label>
