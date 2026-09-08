@@ -39,6 +39,7 @@ export function buildMemberFromVisitor(visitor, members) {
     id: nextPrefixedId(members, "M"),
     name: visitor.name,
     contact: visitor.contact,
+    email: visitor.email || "",
     ministry: "",
     status: "Active",
     joined: visitor.date,

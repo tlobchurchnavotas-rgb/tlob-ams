@@ -26,7 +26,7 @@ function MembersView({ members, setMembers, events, theme, showNotif, currentUse
   const [showArchived, setShowArchived] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editMember, setEditMember] = useState(null);
-  const [form, setForm] = useState({ name: "", contact: "", gender: "", ministry: [], ageGroup: "", status: "Active", joined: "", sourceEventId: "", photo: null, birthday: "", anniversary: "" });
+  const [form, setForm] = useState({ name: "", contact: "", email: "", gender: "", ministry: [], ageGroup: "", status: "Active", joined: "", sourceEventId: "", photo: null, birthday: "", anniversary: "" });
   const [showCSVModal, setShowCSVModal] = useState(false);
   const [showBulkPrintModal, setShowBulkPrintModal] = useState(false);
 
@@ -206,12 +206,12 @@ function MembersView({ members, setMembers, events, theme, showNotif, currentUse
 
   const openAdd = () => {
     setEditMember(null);
-    setForm({ name: "", contact: "", gender: "", ministry: [], ageGroup: "", status: "Active", joined: "", sourceEventId: "", photo: null, birthday: "", anniversary: "" });
+    setForm({ name: "", contact: "", email: "", gender: "", ministry: [], ageGroup: "", status: "Active", joined: "", sourceEventId: "", photo: null, birthday: "", anniversary: "" });
     setShowModal(true);
   };
   const openEdit = m => {
     setEditMember(m);
-    setForm({ name: m.name, contact: m.contact, gender: m.gender || "", ministry: splitMinistries(m.ministry), ageGroup: m.ageGroup || "", status: m.status, joined: m.joined || "", sourceEventId: m.sourceEventId || "", photo: m.photo || null, birthday: m.birthday || "", anniversary: m.anniversary || "" });
+    setForm({ name: m.name, contact: m.contact, email: m.email || "", gender: m.gender || "", ministry: splitMinistries(m.ministry), ageGroup: m.ageGroup || "", status: m.status, joined: m.joined || "", sourceEventId: m.sourceEventId || "", photo: m.photo || null, birthday: m.birthday || "", anniversary: m.anniversary || "" });
     setShowModal(true);
   };
 
@@ -237,7 +237,7 @@ function MembersView({ members, setMembers, events, theme, showNotif, currentUse
       setMembers(prev => prev.map(m => m.id === before.id ? after : m));
       showNotif("Member updated");
       try {
-        const fieldsToTrack = ["name", "contact", "gender", "ministry", "ageGroup", "status", "joined", "sourceEventId", "birthday", "anniversary"];
+        const fieldsToTrack = ["name", "contact", "email", "gender", "ministry", "ageGroup", "status", "joined", "sourceEventId", "birthday", "anniversary"];
         const changedFields = fieldsToTrack
           .map((field) => {
             const beforeVal = field === "ministry" ? formatMinistry(before[field]) : (before[field] ?? "");
@@ -282,7 +282,7 @@ function MembersView({ members, setMembers, events, theme, showNotif, currentUse
           },
         });
       } catch {}
-      setForm({ name: "", contact: "", gender: "", ministry: [], ageGroup: "", status: "Active", joined: "", sourceEventId: "", photo: null, birthday: "", anniversary: "" });
+      setForm({ name: "", contact: "", email: "", gender: "", ministry: [], ageGroup: "", status: "Active", joined: "", sourceEventId: "", photo: null, birthday: "", anniversary: "" });
     }
     if (editMember) setShowModal(false);
   };
@@ -638,6 +638,10 @@ function MembersView({ members, setMembers, events, theme, showNotif, currentUse
                   <input type={type} value={form[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} placeholder={key === "contact" ? "Contact number, Facebook name, or email" : lbl.replace(" *", "")} />
                 </div>
               ))}
+              <div>
+                <label>Email Address</label>
+                <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="Email Address" />
+              </div>
               <div>
                 <label>Joined Date</label>
                 <input type="text" value={form.joined || ""} onChange={e => setForm(f => ({ ...f, joined: e.target.value }))} placeholder="YYYY or YYYY-MM or YYYY-MM-DD" />

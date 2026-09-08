@@ -10,6 +10,7 @@ create table if not exists public.members (
   id text not null,
   name text not null,
   contact text,
+  email text,
   gender text,
   ministry text,
   age_group text,
@@ -24,6 +25,8 @@ create table if not exists public.members (
   updated_at timestamptz not null default now(),
   primary key (owner_id, id)
 );
+
+alter table public.members add column if not exists email text;
 
 alter table public.members add column if not exists source_event_id text;
 alter table public.members add column if not exists gender text;
