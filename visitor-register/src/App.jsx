@@ -354,7 +354,7 @@ export default function App() {
                         }}
                         style={{ ...inputStyle, padding: "9px 10px", fontSize: 14 }}
                       />
-                      <div style={{ marginTop: 4, fontSize: 11, color: C.muted }}>The image will be cropped to a square.</div>
+                      <div style={{ marginTop: 4, fontSize: 11, color: C.muted }}>Optional photo used to identify you in attendance records, kiosk check-in, and recent attendance lists. The image will be cropped to a square.</div>
                     </div>
                     {form.photo ? <button type="button" onClick={() => setForm((f) => ({ ...f, photo: "" }))} style={{ padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface2, color: C.text, fontWeight: 700, cursor: "pointer" }}>Remove</button> : null}
                   </div>
@@ -365,7 +365,7 @@ export default function App() {
                 </div>
                 <div style={{ padding: "12px 12px 10px", borderRadius: 10, background: C.surface2, border: `1px solid ${C.border}` }}>
                   <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, margin: 0 }}>
-                    By checking in, you allow The Lord Our Banner Christian Church to collect and use your name, contact details, and optional photo to record your visit and attendance, in accordance with the Data Privacy Act of 2012 (Republic Act No. 10173).
+                    By checking in, you allow The Lord Our Banner Christian Church to collect and use your name, contact details, and optional photo to identify you in attendance records, kiosk check-in, and recent attendance lists, in accordance with the Data Privacy Act of 2012 (Republic Act No. 10173).
                   </p>
                   <label htmlFor="reg-consent" style={{ display: "flex", alignItems: "flex-start", gap: 10, marginTop: 10, marginBottom: 0, textTransform: "none", letterSpacing: 0, fontSize: 13, fontWeight: 600, color: C.text, cursor: "pointer", lineHeight: 1.45 }}>
                     <input
