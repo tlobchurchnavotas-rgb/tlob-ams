@@ -8,7 +8,7 @@ import { convertVisitorToMember } from "../utils/convertVisitor.js";
 // ─── VISITORS VIEW ────────────────────────────────────────────────────────────
 function VisitorsView({ visitors, setVisitors, members, setMembers, attendance, setAttendance, events, theme, showNotif, currentUser }) {
   const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState({ name: "", contact: "", eventId: "", date: new Date().toISOString().split("T")[0], invitedBy: "", notes: "" });
+  const [form, setForm] = useState({ name: "", contact: "", email: "", eventId: "", date: new Date().toISOString().split("T")[0], invitedBy: "", notes: "" });
 
   const handleAdd = async () => {
     if (!form.name.trim()) return;
@@ -68,7 +68,7 @@ function VisitorsView({ visitors, setVisitors, members, setMembers, attendance, 
 
       <div className="card table-scroll" style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 13, overflow: "hidden" }}>
         <table>
-          <thead><tr><th>ID</th><th>Name</th><th>Contact</th><th>Event</th><th>Date</th><th>Invited By</th><th>Notes</th><th>Actions</th></tr></thead>
+          <thead><tr><th>ID</th><th>Name</th><th>Contact</th><th>Email</th><th>Event</th><th>Date</th><th>Invited By</th><th>Actions</th></tr></thead>
           <tbody>
             {visitors.length === 0 && <tr><td colSpan={8} style={{ textAlign: "center", padding: 36, color: theme.textMuted }}>No visitors logged yet</td></tr>}
             {visitors.map(v => {
@@ -87,10 +87,10 @@ function VisitorsView({ visitors, setVisitors, members, setMembers, attendance, 
                     </div>
                   </td>
                   <td style={{ color: theme.textMuted, fontSize: 12 }}>{v.contact || "—"}</td>
+                  <td style={{ color: theme.textMuted, fontSize: 12 }}>{v.email || "—"}</td>
                   <td style={{ fontSize: 12 }}>{ev?.name || "—"}</td>
                   <td style={{ color: theme.textMuted, fontSize: 12 }}>{v.date}</td>
                   <td style={{ fontSize: 12 }}>{inviter?.name || "—"}</td>
-                  <td style={{ color: theme.textMuted, fontSize: 12, maxWidth: 140 }}>{v.notes || "—"}</td>
                   <td>
                     <div style={{ display: "flex", gap: 5 }}>
                       {!v.convertedToMember && (
@@ -120,6 +120,7 @@ function VisitorsView({ visitors, setVisitors, members, setMembers, attendance, 
             <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
               <div><label>Full Name *</label><input type="text" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Visitor name" /></div>
               <div><label>Contact Number</label><input type="tel" value={form.contact} onChange={e => setForm(f => ({ ...f, contact: e.target.value }))} placeholder="09XXXXXXXXX" /></div>
+              <div><label>Email Address</label><input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="you@example.com" /></div>
               <div className="responsive-modal-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                 <div>
                   <label>Event</label>

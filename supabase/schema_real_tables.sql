@@ -111,6 +111,7 @@ create table if not exists public.visitors (
   id text not null,
   name text not null,
   contact text,
+  email text,
   event_id text,
   date date,
   invited_by text,
@@ -123,6 +124,7 @@ create table if not exists public.visitors (
 );
 
 alter table public.visitors add column if not exists photo text;
+alter table public.visitors add column if not exists email text;
 
 drop trigger if exists trg_visitors_updated_at on public.visitors;
 create trigger trg_visitors_updated_at

@@ -112,9 +112,9 @@ Deno.serve(async (req) => {
 
       const name = String(payload.name || "").trim();
       const contact = String(payload.contact || "").trim().slice(0, 40);
+      const email = String(payload.email || "").trim().slice(0, 160);
       const eventId = String(payload.eventId || "").trim();
       const invitedBy = String(payload.invitedBy || "").trim();
-      const notes = String(payload.notes || "").trim().slice(0, 500);
       const photo = String(payload.photo || "").trim();
       if (photo && (!/^data:image\/(jpeg|jpg|png|webp);base64,/i.test(photo) || photo.length > 400_000)) {
         return json(400, { error: "Photo must be a valid image under 300 KB." });
@@ -179,7 +179,7 @@ Deno.serve(async (req) => {
             event_id: eventId,
             date: event.date || new Date().toISOString().slice(0, 10),
             invited_by: invitedById || null,
-            notes: notes || null,
+            email: email || null,
             converted_to_member: false,
             photo: photo || null,
           });

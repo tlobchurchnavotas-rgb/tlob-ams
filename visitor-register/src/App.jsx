@@ -76,7 +76,7 @@ export default function App() {
     eventId: eventFromQuery(),
     invitedBy: "",
     invitedByName: "",
-    notes: "",
+    email: "",
     website: "",
     photo: "",
   });
@@ -170,7 +170,7 @@ export default function App() {
         contact: form.contact.trim(),
         eventId: form.eventId,
         invitedBy: form.invitedBy,
-        notes: form.notes.trim(),
+        email: form.email.trim(),
         website: form.website,
         photo: form.photo,
       });
@@ -236,7 +236,7 @@ export default function App() {
               onClick={() => {
                 setResult(null);
                 setConsentChecked(false);
-                setForm((f) => ({ ...f, name: "", contact: "", invitedBy: "", invitedByName: "", notes: "", photo: "", website: "" }));
+                setForm((f) => ({ ...f, name: "", contact: "", invitedBy: "", invitedByName: "", email: "", photo: "", website: "" }));
                 setMemberQuery("");
               }}
               style={{ marginTop: 18, width: "100%", padding: "12px 16px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface2, color: C.text, fontWeight: 700, fontSize: 14, cursor: "pointer", fontFamily: "inherit" }}
@@ -330,8 +330,8 @@ export default function App() {
                   )}
                 </div>
                 <div>
-                  <label htmlFor="reg-notes">Notes</label>
-                  <textarea id="reg-notes" rows={2} style={{ ...inputStyle, resize: "vertical" }} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Interests, remarks..." />
+                  <label htmlFor="reg-email">Email Address</label>
+                  <input id="reg-email" type="email" style={inputStyle} autoComplete="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} placeholder="you@example.com" />
                 </div>
                 <div>
                   <label htmlFor="reg-photo">Photo (optional, 1x1)</label>
@@ -354,7 +354,7 @@ export default function App() {
                         }}
                         style={{ ...inputStyle, padding: "9px 10px", fontSize: 14 }}
                       />
-                      <div style={{ marginTop: 4, fontSize: 11, color: C.muted }}>Optional photo used to identify you in attendance records, kiosk check-in, and recent attendance lists. The image will be cropped to a square.</div>
+                      <div style={{ marginTop: 4, fontSize: 11, color: C.muted }}>Optional photo used to identify you in attendance records, kiosk check-in attendance, and recent attendance lists. The image will be cropped to a square.</div>
                     </div>
                     {form.photo ? <button type="button" onClick={() => setForm((f) => ({ ...f, photo: "" }))} style={{ padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface2, color: C.text, fontWeight: 700, cursor: "pointer" }}>Remove</button> : null}
                   </div>
