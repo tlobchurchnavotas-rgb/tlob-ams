@@ -53,6 +53,7 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setMe
   const setMembersRef = useRef(setMembers); useEffect(() => { setMembersRef.current = setMembers; }, [setMembers]);
   const setVisitorsRef = useRef(setVisitors); useEffect(() => { setVisitorsRef.current = setVisitors; }, [setVisitors]);
   const statusRef = useRef(scanStatus); useEffect(() => { statusRef.current = scanStatus; }, [scanStatus]);
+  const seenVisitorAttendanceRef = useRef(null);
   const [publicRegisterEnabled] = usePersisted("public_register_enabled", true, currentUser?.id ?? null);
   const [publicRegisterBaseUrl] = usePersisted("public_register_base_url", "", currentUser?.id ?? null);
   const [autoConvertAfterVisits] = usePersisted("auto_convert_after_visits", 2, currentUser?.id ?? null);
@@ -170,6 +171,35 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setMe
       console.error("Voice playback failed:", e);
     }
   }, [soundEnabled]);
+
+  useEffect(() => {
+    const eventVisitorRecords = attendance.filter((record) => record.eventId === selEv && record.visitorId);
+    const currentIds = new Set(eventVisitorRecords.map((record) => record.id));
+    if (seenVisitorAttendanceRef.current === null) {
+      seenVisitorAttendanceRef.current = currentIds;
+      return;
+    }
+
+    const newRecord = eventVisitorRecords
+      .filter((record) => !seenVisitorAttendanceRef.current.has(record.id))
+      .sort((first, second) => new Date(second.timestamp).getTime() - new Date(first.timestamp).getTime())[0];
+    if (!newRecord) {
+      seenVisitorAttendanceRef.current = currentIds;
+      return;
+    }
+
+    const visitor = visitors.find((item) => item.id === newRecord.visitorId);
+    if (!visitor) return;
+    seenVisitorAttendanceRef.current = currentIds;
+    if (statusRef.current) return;
+
+    playSound("success");
+    setScanStatus({ type: "success", hold: "visitor", member: visitor, visitorId: visitor.id });
+    setTimeout(() => {
+      setScanStatus((current) => current?.member?.id === visitor.id ? null : current);
+      inputRef.current?.focus();
+    }, 2800);
+  }, [attendance, visitors, selEv, playSound]);
 
   const processScan = useCallback((raw) => {
     const val = (raw || "").trim(), evId = selEvRef.current;

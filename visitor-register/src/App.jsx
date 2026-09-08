@@ -175,6 +175,9 @@ export default function App() {
         photo: form.photo,
       });
       setResult(data);
+      window.setTimeout(() => {
+        try { window.close(); } catch {}
+      }, 1200);
     } catch (err) {
       setFormError(err?.message || "Could not complete registration.");
     } finally {
