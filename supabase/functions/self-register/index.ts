@@ -115,6 +115,10 @@ Deno.serve(async (req) => {
       const eventId = String(payload.eventId || "").trim();
       const invitedBy = String(payload.invitedBy || "").trim();
       const notes = String(payload.notes || "").trim().slice(0, 500);
+      const photo = String(payload.photo || "").trim();
+      if (photo && (!/^data:image\/(jpeg|jpg|png|webp);base64,/i.test(photo) || photo.length > 400_000)) {
+        return json(400, { error: "Photo must be a valid image under 300 KB." });
+      }
       if (!name) return json(400, { error: "Full name is required." });
       if (!eventId) return json(400, { error: "Please select an event." });
 
@@ -156,6 +160,14 @@ Deno.serve(async (req) => {
       });
 
       let visitorId = existing?.id || "";
+      if (visitorId && photo) {
+        const { error: photoUpdateError } = await supabase
+          .from("visitors")
+          .update({ photo })
+          .eq("owner_id", churchOwnerId)
+          .eq("id", visitorId);
+        if (photoUpdateError) throw photoUpdateError;
+      }
       if (!visitorId) {
         for (let attempt = 0; attempt < 5; attempt++) {
           visitorId = nextPrefixedId((visitors || []).map((v) => v.id), "V");
@@ -169,6 +181,7 @@ Deno.serve(async (req) => {
             invited_by: invitedById || null,
             notes: notes || null,
             converted_to_member: false,
+            photo: photo || null,
           });
           if (!insertError) break;
           if (insertError.code === "23505") {

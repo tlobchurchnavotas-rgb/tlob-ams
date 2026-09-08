@@ -43,7 +43,7 @@ export function buildMemberFromVisitor(visitor, members) {
     status: "Active",
     joined: visitor.date,
     sourceEventId: visitor.eventId || "",
-    photo: null,
+    photo: visitor.photo || null,
     archived: false,
     birthday: "",
     anniversary: "",

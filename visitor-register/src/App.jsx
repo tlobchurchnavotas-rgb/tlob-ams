@@ -4,6 +4,31 @@ import { fetchPublicEvents, searchPublicMembers, submitPublicVisitor } from "./a
 import { claimFromLocation } from "./claim.js";
 import MemberIdCard from "./MemberIdCard.jsx";
 
+function preparePhoto(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) { resolve(""); return; }
+    if (!file.type.startsWith("image/")) { reject(new Error("Please choose an image file.")); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const image = new Image();
+      image.onload = () => {
+        const size = Math.min(image.naturalWidth, image.naturalHeight);
+        const sx = (image.naturalWidth - size) / 2;
+        const sy = (image.naturalHeight - size) / 2;
+        const canvas = document.createElement("canvas");
+        canvas.width = 160;
+        canvas.height = 160;
+        canvas.getContext("2d").drawImage(image, sx, sy, size, size, 0, 0, 160, 160);
+        resolve(canvas.toDataURL("image/jpeg", 0.82));
+      };
+      image.onerror = () => reject(new Error("Could not read that image."));
+      image.src = String(reader.result || "");
+    };
+    reader.onerror = () => reject(new Error("Could not read that image."));
+    reader.readAsDataURL(file);
+  });
+}
+
 const C = {
   bg: "#f0f4ff",
   card: "#ffffff",
@@ -53,6 +78,7 @@ export default function App() {
     invitedByName: "",
     notes: "",
     website: "",
+    photo: "",
   });
   const [memberQuery, setMemberQuery] = useState("");
   const [memberHits, setMemberHits] = useState([]);
@@ -146,6 +172,7 @@ export default function App() {
         invitedBy: form.invitedBy,
         notes: form.notes.trim(),
         website: form.website,
+        photo: form.photo,
       });
       setResult(data);
     } catch (err) {
@@ -209,7 +236,7 @@ export default function App() {
               onClick={() => {
                 setResult(null);
                 setConsentChecked(false);
-                setForm((f) => ({ ...f, name: "", contact: "", invitedBy: "", invitedByName: "", notes: "", website: "" }));
+                setForm((f) => ({ ...f, name: "", contact: "", invitedBy: "", invitedByName: "", notes: "", photo: "", website: "" }));
                 setMemberQuery("");
               }}
               style={{ marginTop: 18, width: "100%", padding: "12px 16px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface2, color: C.text, fontWeight: 700, fontSize: 14, cursor: "pointer", fontFamily: "inherit" }}
@@ -306,13 +333,39 @@ export default function App() {
                   <label htmlFor="reg-notes">Notes</label>
                   <textarea id="reg-notes" rows={2} style={{ ...inputStyle, resize: "vertical" }} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Interests, remarks..." />
                 </div>
+                <div>
+                  <label htmlFor="reg-photo">Photo (optional, 1x1)</label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    {form.photo ? <img src={form.photo} alt="Photo preview" style={{ width: 58, height: 58, borderRadius: "50%", objectFit: "cover", border: `2px solid ${C.border}` }} /> : null}
+                    <div style={{ flex: 1 }}>
+                      <input
+                        id="reg-photo"
+                        type="file"
+                        accept="image/*"
+                        onChange={async (e) => {
+                          try {
+                            const photo = await preparePhoto(e.target.files?.[0]);
+                            setForm((f) => ({ ...f, photo }));
+                          } catch (error) {
+                            setFormError(error?.message || "Could not process that image.");
+                          } finally {
+                            e.target.value = "";
+                          }
+                        }}
+                        style={{ ...inputStyle, padding: "9px 10px", fontSize: 14 }}
+                      />
+                      <div style={{ marginTop: 4, fontSize: 11, color: C.muted }}>The image will be cropped to a square.</div>
+                    </div>
+                    {form.photo ? <button type="button" onClick={() => setForm((f) => ({ ...f, photo: "" }))} style={{ padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface2, color: C.text, fontWeight: 700, cursor: "pointer" }}>Remove</button> : null}
+                  </div>
+                </div>
                 <div aria-hidden="true" style={{ position: "absolute", left: -9999, opacity: 0, height: 0, overflow: "hidden" }}>
                   <label htmlFor="reg-website">Website</label>
                   <input id="reg-website" tabIndex={-1} autoComplete="off" value={form.website} onChange={(e) => setForm((f) => ({ ...f, website: e.target.value }))} />
                 </div>
                 <div style={{ padding: "12px 12px 10px", borderRadius: 10, background: C.surface2, border: `1px solid ${C.border}` }}>
                   <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, margin: 0 }}>
-                    By checking in, you allow The Lord Our Banner Christian Church to collect and use your name and contact details to record your visit and attendance, in accordance with the Data Privacy Act of 2012 (Republic Act No. 10173).
+                    By checking in, you allow The Lord Our Banner Christian Church to collect and use your name, contact details, and optional photo to record your visit and attendance, in accordance with the Data Privacy Act of 2012 (Republic Act No. 10173).
                   </p>
                   <label htmlFor="reg-consent" style={{ display: "flex", alignItems: "flex-start", gap: 10, marginTop: 10, marginBottom: 0, textTransform: "none", letterSpacing: 0, fontSize: 13, fontWeight: 600, color: C.text, cursor: "pointer", lineHeight: 1.45 }}>
                     <input

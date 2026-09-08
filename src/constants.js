@@ -258,8 +258,6 @@ function useSupabaseTable(tableName, initialArray, ownerId) {
       // Map camelCase -> snake_case for DB compatibility
       if (out.ageGroup !== undefined) { out.age_group = out.ageGroup; delete out.ageGroup; }
       if (out.sourceEventId !== undefined) { out.source_event_id = out.sourceEventId; delete out.sourceEventId; }
-      // Avoid storing base64 data URLs in Postgres (too large / slow). Use Supabase Storage later.
-      if (typeof out.photo === "string" && out.photo.startsWith("data:")) out.photo = null;
       return out;
     }
     if (tableName === "events") {

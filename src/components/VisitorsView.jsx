@@ -79,7 +79,7 @@ function VisitorsView({ visitors, setVisitors, members, setMembers, attendance, 
                   <td><code style={{ background: theme.surface2, padding: "2px 6px", borderRadius: 4, fontSize: 11 }}>{v.id}</code></td>
                   <td>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <Avatar member={{ name: v.name }} size={26} />
+                      <Avatar member={{ name: v.name, photo: v.photo }} size={26} />
                       <div>
                         <div style={{ fontWeight: 600, fontSize: 13 }}>{v.name}</div>
                         {v.convertedToMember && <span style={{ fontSize: 10, color: theme.success, fontWeight: 700 }}>✓ Now a Member</span>}

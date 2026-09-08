@@ -115,11 +115,14 @@ create table if not exists public.visitors (
   date date,
   invited_by text,
   notes text,
+  photo text,
   converted_to_member boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   primary key (owner_id, id)
 );
+
+alter table public.visitors add column if not exists photo text;
 
 drop trigger if exists trg_visitors_updated_at on public.visitors;
 create trigger trg_visitors_updated_at

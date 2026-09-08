@@ -447,7 +447,7 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setMe
 
   const SC = { success: theme.success, duplicate: theme.warning, error: theme.danger };
   const SMSG = { success: "✓ Attendance Recorded", duplicate: "⚠ Already Recorded", error: "✗ Member Not Found" };
-  const SICO = { success: "🎉✅", duplicate: "⚠️", error: "❌" };
+  const SICO = { success: "✅✅✅", duplicate: "⚠️⚠️⚠️", error: "❌❌❌" };
 
   // carousel index for kiosk greeting
   const slides = useMemo(() => KIOSK_SLIDES || [], []);
@@ -466,6 +466,7 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setMe
     ? Math.min(720, Math.max(280, viewport.width - shellPad * 2))
     : Math.min(500, Math.max(300, viewport.width - sidePanelWidth - 48));
   const cameraHeight = Math.max(180, Math.min(isShort ? 220 : isNarrow ? 260 : 300, Math.round(scanMaxWidth * 9 / 16)));
+  const standardCardHeight = isNarrow ? 200 : 220;
   const changeKioskZoom = (delta) => {
     setKioskZoom((current) => Math.min(1.3, Math.max(0.8, Number((current + delta).toFixed(1)))));
   };
@@ -531,10 +532,13 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setMe
           <div style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 10, margin: "auto 0" }}>
           {/* Status card */}
           {scanStatus ? (
-            <div style={{ animation: "pop .35s ease", background: `${SC[scanStatus.type]}38`, border: `2px solid ${SC[scanStatus.type]}40`, borderRadius: 22, padding: isNarrow ? "20px 18px" : "28px 32px", textAlign: "center", width: "100%", maxWidth: scanMaxWidth, overflowWrap: "anywhere" }}>
-              <div style={{ fontSize: scanStatus.hold ? 40 : 64, marginBottom: 10 }}>{scanStatus.hold === "member" ? "🎉" : SICO[scanStatus.type]}</div>
-              <div style={{ fontSize: isNarrow ? 21 : 26, fontWeight: 800, color: SC[scanStatus.type], marginBottom: 6, overflowWrap: "anywhere" }}>{scanStatus.member?.name}</div>
-              <div style={{ fontSize: 16, color: SC[scanStatus.type], fontWeight: 600 }}>
+            <div style={{ animation: "pop .35s ease", background: `${SC[scanStatus.type]}38`, border: `2px solid ${SC[scanStatus.type]}40`, borderRadius: 22, padding: isNarrow ? "14px 18px" : "16px 24px", textAlign: "center", width: "100%", maxWidth: scanMaxWidth, overflowWrap: "anywhere", ...(scanStatus.hold ? {} : { height: standardCardHeight, boxSizing: "border-box", display: "flex", flexDirection: "column", justifyContent: "center" }) }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 8 }}>
+                <Avatar member={scanStatus.member} size={isNarrow ? 78 : 80} style={{ border: `3px solid ${SC[scanStatus.type]}55` }} />
+                <div style={{ fontSize: isNarrow ? 21 : 27, fontWeight: 800, color: SC[scanStatus.type], overflowWrap: "anywhere" }}>{scanStatus.member?.name}</div>
+              </div>
+              <div style={{ fontSize: scanStatus.hold ? 40 : 48, marginBottom: 6, lineHeight: 1 }}>{scanStatus.hold === "member" ? "🎉" : SICO[scanStatus.type]}</div>
+              <div style={{ fontSize: 18, color: SC[scanStatus.type], fontWeight: 600 }}>
                 {scanStatus.hold === "member" ? "You're now a member!" : scanStatus.hold === "visitor" ? "✓ Attendance Recorded" : SMSG[scanStatus.type]}
               </div>
               {scanStatus.member?.ministry && scanStatus.type === "success" && !scanStatus.hold && <div style={{ fontSize: 13, color: theme.textMuted, marginTop: 6 }}>{scanStatus.member.ministry}</div>}
@@ -568,9 +572,9 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setMe
               )}
             </div>
           ) : (
-            <div style={{ background: theme.surface, border: `2px dashed ${theme.border}`, borderRadius: 22, padding: isNarrow ? "22px 18px" : "32px 42px", marginTop: isNarrow ? 10 : 15, textAlign: "center", width: "100%", maxWidth: scanMaxWidth }}>
+            <div style={{ background: theme.surface, border: `2px dashed ${theme.border}`, borderRadius: 22, padding: isNarrow ? "22px 18px" : "32px 42px", marginTop: isNarrow ? 10 : 15, textAlign: "center", width: "100%", maxWidth: scanMaxWidth, height: standardCardHeight, boxSizing: "border-box", display: "flex", flexDirection: "column", justifyContent: "center" }}>
               {slides.length > 0 ? (
-                <img src={slides[slideIdx]} alt="Greeting" style={{ maxWidth: 100, maxHeight: 120, marginBottom: 10, objectFit: "contain" }} />
+                <img src={slides[slideIdx]} alt="Greeting" style={{ display: "block", width: "100%", maxWidth: 136, maxHeight: 88, margin: "0 auto 6px", objectFit: "contain" }} />
               ) : (
                 <div style={{ fontSize: 72, marginBottom: 10 }}>🎉</div>
               )}
