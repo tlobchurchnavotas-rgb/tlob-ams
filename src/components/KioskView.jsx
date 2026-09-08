@@ -191,10 +191,11 @@ function KioskView({ members, visitors, events, attendance, setAttendance, setMe
     const visitor = visitors.find((item) => item.id === newRecord.visitorId);
     if (!visitor) return;
     seenVisitorAttendanceRef.current = currentIds;
+    setShowRegisterQr(false);
     if (statusRef.current) return;
 
     playSound("success");
-    setScanStatus({ type: "success", hold: "visitor", member: visitor, visitorId: visitor.id });
+    setScanStatus({ type: "success", member: visitor });
     setTimeout(() => {
       setScanStatus((current) => current?.member?.id === visitor.id ? null : current);
       inputRef.current?.focus();
