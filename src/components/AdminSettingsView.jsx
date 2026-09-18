@@ -267,7 +267,7 @@ export default function AdminSettingsView({ theme, showNotif, currentUser, setCu
   const avatarPreview = form.avatarUrl?.trim() || "";
 
   return (
-    <div className="settings-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gridTemplateAreas: '"header header" "profile public" "application public"', gap: 16, maxWidth: 1180, width: "100%", margin: "0 auto", boxSizing: "border-box", alignItems: "start" }}>
+    <div className="settings-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gridTemplateAreas: '"header header" "profile public" "application public"', gap: 16, maxWidth: 1180, width: "100%", margin: "0 auto", boxSizing: "border-box", alignItems: "stretch" }}>
       <div className="card" style={{ gridArea: "header", background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 14, padding: 18 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div>

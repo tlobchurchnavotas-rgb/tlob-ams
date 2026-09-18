@@ -413,7 +413,7 @@ function DashboardView({ members, events, attendance, theme }) {
           { label: "All-time Records ✨", value: attendance.length, sub: "Attendance entries", color: theme.accent2, icon: "analytics" },
           { label: "Upcoming Events", value: events.filter(e => e.status === "Upcoming").length, sub: "Scheduled", color: theme.warning, icon: "events" },
         ].map((s, i) => (
-          <div key={i} className="card" style={{ position: "relative", background: `${s.color}25`, border: `3px solid ${s.color}50`, borderRadius: 13, padding: 18, paddingRight: 60, animationDelay: `${i * .08}s` }}>
+          <div key={i} className="card" style={{ position: "relative", background: `${s.color}25`, border: `3px solid ${s.color}`, borderRadius: 13, padding: 18, paddingRight: 60, animationDelay: `${i * .08}s` }}>
             <div style={{ position: "absolute", top: 14, right: 14, width: 38, height: 38, borderRadius: 9, background: `${s.color}30`, display: "flex", alignItems: "center", justifyContent: "center", color: s.color }}>
               <Icon name={s.icon} size={19} />
             </div>
@@ -472,7 +472,7 @@ function DashboardView({ members, events, attendance, theme }) {
             style={{
               position: "relative",
               background: `${s.color}20`,
-              border: `3px solid ${s.color}50`,
+              border: `3px solid ${s.color}`,
               borderRadius: 13,
               padding: "10px 60px 10px 16px",
               minHeight: 52,
