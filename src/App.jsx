@@ -53,6 +53,7 @@ export default function TLOBApp() {
   const [events, setEvents, eventsSync] = useSupabaseTable("events", initialEvents, ownerId);
   const [attendance, setAttendance, attendanceSync, attendanceHydrated] = useSupabaseTable("attendance", initialAttendance, ownerId);
   const [visitors, setVisitors, visitorsSync] = useSupabaseTable("visitors", initialVisitors, ownerId);
+  const [emailStatusRows, setEmailStatusRows] = useState([]);
   const [darkMode, setDarkMode] = usePersisted("darkMode", true);
   const [completionPin, setCompletionPin] = usePersisted("completion_pin", "123456", ownerId);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -87,6 +88,24 @@ export default function TLOBApp() {
     const reconciled = reconcileMemberActivity(members, attendance);
     if (reconciled !== members) setMembers(reconciled);
   }, [ownerId, membersHydrated, attendanceHydrated, members, attendance, setMembers]);
+
+  useEffect(() => {
+    if (!ownerId || !isSupabaseConfigured || !supabase) {
+      setEmailStatusRows([]);
+      return undefined;
+    }
+    let cancelled = false;
+    const loadEmailStatuses = async () => {
+      const { data, error } = await supabase.rpc("get_member_reengagement_status");
+      if (!cancelled && !error) setEmailStatusRows(data || []);
+    };
+    loadEmailStatuses();
+    const refreshId = setInterval(loadEmailStatuses, 60000);
+    return () => {
+      cancelled = true;
+      clearInterval(refreshId);
+    };
+  }, [ownerId]);
 
   useEffect(() => {
     const update = () => setIsFullscreen(Boolean(document.fullscreenElement));
@@ -529,7 +548,7 @@ export default function TLOBApp() {
         <main className="app-main-content" style={{ flex: 1, overflow: "auto", padding: 22, background: theme.bg }}>
           {profileMember
             ? <MemberProfile member={profileMember} members={members} attendance={attendance} events={events} theme={theme} onClose={() => setProfileMember(null)} showNotif={showNotif} />
-            : activeView === "dashboard" ? <DashboardView members={members} events={events} attendance={attendance} theme={theme} />
+            : activeView === "dashboard" ? <DashboardView members={members} events={events} attendance={attendance} emailStatusRows={emailStatusRows} theme={theme} />
             : activeView === "members" ? <MembersView members={members} setMembers={setMembers} events={events} theme={theme} showNotif={showNotif} currentUser={currentUser} onViewProfile={setProfileMember} />
             : activeView === "events" ? <EventsView events={events} setEvents={setEvents} attendance={attendance} setAttendance={setAttendance} members={members} visitors={visitors} theme={theme} showNotif={showNotif} currentUser={currentUser} completionPin={completionPin} />
             : activeView === "scanner" ? <ScannerView members={members} events={events} attendance={attendance} setAttendance={setAttendance} theme={theme} showNotif={showNotif} currentUser={currentUser} onLaunchKiosk={async (evId) => {

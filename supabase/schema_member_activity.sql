@@ -27,6 +27,30 @@ to authenticated
 using (false)
 with check (false);
 
+create or replace function public.get_member_reengagement_status()
+returns table (
+  member_id text,
+  email text,
+  status text,
+  absence_started_at timestamptz,
+  sent_at timestamptz,
+  error text,
+  created_at timestamptz
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select queue.member_id, queue.email, queue.status,
+         queue.absence_started_at, queue.sent_at, queue.error, queue.created_at
+  from public.member_reengagement_queue queue
+  where queue.owner_id = auth.uid()
+  order by queue.created_at desc;
+$$;
+
+revoke all on function public.get_member_reengagement_status() from public;
+grant execute on function public.get_member_reengagement_status() to authenticated;
+
 create or replace function public.refresh_member_activity()
 returns trigger
 language plpgsql

@@ -84,7 +84,7 @@ const buildInactiveMemberMeta = (member, attendance, now) => {
 };
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
-function DashboardView({ members, events, attendance, theme }) {
+function DashboardView({ members, events, attendance, emailStatusRows = [], theme }) {
   const [weekMonthCursor, setWeekMonthCursor] = useState(() => new Date());
   const [yearCursor, setYearCursor] = useState(() => new Date().getFullYear());
   const [newMembersWeekMonthCursor, setNewMembersWeekMonthCursor] = useState(() => new Date());
@@ -354,6 +354,14 @@ function DashboardView({ members, events, attendance, theme }) {
     label: ev.name.split(" ")[0],
     value: attendance.filter(a => a.eventId === ev.id).length,
   }));
+
+  const inactiveMembersForMonitoring = members
+    .filter((member) => member.status === "Inactive" && !member.archived)
+    .map((member) => {
+      const latestEmail = emailStatusRows.find((row) => row.member_id === member.id);
+      const lastAttendance = getMemberLastAttendanceDate(member, attendance);
+      return { ...member, latestEmail, lastAttendance };
+    });
 
   // ── REAL DATA: members per ministry ──
   const ministries = [...new Set(members.filter(m => m.ministry && !m.archived).map(m => m.ministry))];
@@ -781,6 +789,37 @@ function DashboardView({ members, events, attendance, theme }) {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {inactiveMembersForMonitoring.length > 0 && (
+        <div className="card" style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 13, padding: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 4 }}>
+            <div style={{ fontWeight: 700, fontSize: 15 }}>Inactive Member Monitoring</div>
+            <span className="badge tag-inactive">{inactiveMembersForMonitoring.length} inactive</span>
+          </div>
+          <div style={{ fontSize: 12, color: theme.textMuted, marginBottom: 14 }}>Attendance recovery and re-engagement email status</div>
+          <div className="table-scroll">
+            <table style={{ minWidth: 680 }}>
+              <thead><tr><th>Member</th><th>Email</th><th>Last attendance</th><th>Email status</th><th>Sent</th></tr></thead>
+              <tbody>
+                {inactiveMembersForMonitoring.map((member) => {
+                  const status = member.latestEmail?.status || "not queued";
+                  const statusLabel = status === "sent" ? "Sent" : status === "failed" ? "Failed" : status === "pending" ? "Pending" : "Not queued";
+                  const statusClass = status === "sent" ? "tag-active" : status === "failed" ? "tag-inactive" : "tag-upcoming";
+                  return (
+                    <tr key={member.id}>
+                      <td><strong>{member.name}</strong><div style={{ fontSize: 10, color: theme.textMuted }}>{member.id}</div></td>
+                      <td>{member.email || "No email"}</td>
+                      <td>{member.lastAttendance ? member.lastAttendance.toLocaleDateString() : "No attendance"}</td>
+                      <td><span className={`badge ${statusClass}`}>{statusLabel}</span></td>
+                      <td>{member.latestEmail?.sent_at ? new Date(member.latestEmail.sent_at).toLocaleDateString() : "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
