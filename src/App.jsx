@@ -363,7 +363,8 @@ export default function TLOBApp() {
         .btn{cursor:pointer;border:none;font-family:inherit;font-weight:600;transition:all .18s;}
         .btn:hover{filter:brightness(1.1);transform:translateY(-1px);}
         .btn:active{transform:scale(.97) translateY(0);}
-        .card{animation:fadeUp .35s ease both;}
+        .card{animation:fadeUp .35s ease both;box-shadow:0 2px 8px ${darkMode ? "rgba(0,0,0,.24)" : "rgba(35,55,95,.08)"},0 10px 24px ${darkMode ? "rgba(0,0,0,.12)" : "rgba(35,55,95,.04)"};transition:box-shadow .2s ease,transform .2s ease;}
+        .card:hover{transform:translateY(-2px);box-shadow:0 5px 14px ${darkMode ? "rgba(0,0,0,.3)" : "rgba(35,55,95,.13)"},0 14px 28px ${darkMode ? "rgba(0,0,0,.16)" : "rgba(35,55,95,.06)"};}
         .stat-card{transition:transform .2s,box-shadow .2s;}
         .stat-card:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(0,0,0,.15);}
         .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:1000;animation:fadeUp .15s ease;}

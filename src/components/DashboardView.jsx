@@ -92,10 +92,23 @@ function DashboardView({ members, events, attendance, emailStatusRows = [], them
   const [sharedEventFilter, setSharedEventFilter] = useState("all");
 
   const active = members.filter(m => m.status === "Active" && !m.archived).length;
-  const todayEvent = events.find(e => e.status === "Active");
-  const todayAtt = todayEvent ? attendance.filter(a => a.eventId === todayEvent.id).length : 0;
+  const latestCompletedEvent = [...events]
+    .filter(e => e.status === "Completed")
+    .sort((a, b) => `${b.date || ""}T${b.time || ""}`.localeCompare(`${a.date || ""}T${a.time || ""}`))[0];
+  const latestAttendanceTotal = latestCompletedEvent
+    ? attendance.filter(a => a.eventId === latestCompletedEvent.id).length
+    : 0;
+  const previousMonthDate = new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1);
+  const previousMonthKey = `${previousMonthDate.getFullYear()}-${String(previousMonthDate.getMonth() + 1).padStart(2, "0")}`;
+  const previousMonthLabel = previousMonthDate.toLocaleString(undefined, { month: "long", year: "numeric" });
+  const completedEvents = events.filter(e => e.status === "Completed" && e.date?.slice(0, 7) === previousMonthKey);
+  const averageAttendance = completedEvents.length
+    ? completedEvents.reduce((sum, event) => sum + attendance.filter(a => a.eventId === event.id).length, 0) / completedEvents.length
+    : 0;
   const total = members.filter(m => !m.archived).length;
-  const recent = [...attendance].reverse().slice(0, 5);
+  const recent = [...attendance]
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .slice(0, 5);
 
   const monthLabel = useMemo(() => weekMonthCursor.toLocaleString(undefined, { month: "long", year: "numeric" }), [weekMonthCursor]);
   const newMembersMonthLabel = useMemo(() => newMembersWeekMonthCursor.toLocaleString(undefined, { month: "long", year: "numeric" }), [newMembersWeekMonthCursor]);
@@ -417,8 +430,8 @@ function DashboardView({ members, events, attendance, emailStatusRows = [], them
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 14 }}>
         {[
           { label: "Total Members", value: total, sub: `${active} active`, color: theme.accent, icon: "members" },
-          { label: "Today's Attendance", value: todayAtt, sub: todayEvent?.name || "No active event", color: theme.success, icon: "check" },
-          { label: "All-time Records ✨", value: attendance.length, sub: "Attendance entries", color: theme.accent2, icon: "analytics" },
+          { label: "Latest Attendance Total", value: latestAttendanceTotal, sub: latestCompletedEvent?.name || "No completed event", color: theme.success, icon: "check" },
+          { label: "Average Attendance", value: averageAttendance.toFixed(1), sub: `All last month completed events (${previousMonthLabel})`, color: theme.accent2, icon: "analytics" },
           { label: "Upcoming Events", value: events.filter(e => e.status === "Upcoming").length, sub: "Scheduled", color: theme.warning, icon: "events" },
         ].map((s, i) => (
           <div key={i} className="card" style={{ position: "relative", background: `${s.color}25`, border: `3px solid ${s.color}`, borderRadius: 13, padding: 18, paddingRight: 60, animationDelay: `${i * .08}s` }}>
