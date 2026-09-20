@@ -1,4 +1,14 @@
 # TLOB Attendance Management System
+
+## Automatic member activity
+
+Run `supabase/schema_member_activity.sql` after the real-table schema. Deploy the
+`member-reengagement` Edge Function with `RESEND_API_KEY`,
+`REENGAGEMENT_FROM_EMAIL`, `CRON_SECRET`, and optionally `APP_URL` configured as
+Supabase secrets. Schedule that function daily with Supabase Cron or another
+scheduler, sending `x-cron-secret: <CRON_SECRET>`. The function queues email
+after one month without attendance, marks members inactive after two months, and
+restores inactive members after attendance at two distinct events.
 **The Lord Our Banner Christian Church**  
 Church Attendance Management System
 

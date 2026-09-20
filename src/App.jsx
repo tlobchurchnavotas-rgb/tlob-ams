@@ -29,6 +29,7 @@ import { canAccessStaffFeatures, canManageAccounts } from "./roles.js";
 import { isSupabaseConfigured, supabase } from "./supabaseClient.js";
 import { getOrCreateProfile, getSession, onAuthStateChange, signInWithPassword, signOut } from "./auth.js";
 import { migrateKvToRealTablesIfNeeded } from "./migrate.js";
+import { reconcileMemberActivity } from "./memberActivity.js";
 
 // ─── WELCOME ───────────────────────────────────────────────────────────────────
 // Welcome to TLOB AMS
@@ -48,9 +49,9 @@ export default function TLOBApp() {
   const initialAttendance = useMemo(() => (isSupabaseConfigured ? [] : SEED_ATTENDANCE), []);
   const initialVisitors = useMemo(() => (isSupabaseConfigured ? [] : SEED_VISITORS), []);
 
-  const [members, setMembers, membersSync] = useSupabaseTable("members", initialMembers, ownerId);
+  const [members, setMembers, membersSync, membersHydrated] = useSupabaseTable("members", initialMembers, ownerId);
   const [events, setEvents, eventsSync] = useSupabaseTable("events", initialEvents, ownerId);
-  const [attendance, setAttendance, attendanceSync] = useSupabaseTable("attendance", initialAttendance, ownerId);
+  const [attendance, setAttendance, attendanceSync, attendanceHydrated] = useSupabaseTable("attendance", initialAttendance, ownerId);
   const [visitors, setVisitors, visitorsSync] = useSupabaseTable("visitors", initialVisitors, ownerId);
   const [darkMode, setDarkMode] = usePersisted("darkMode", true);
   const [completionPin, setCompletionPin] = usePersisted("completion_pin", "123456", ownerId);
@@ -80,6 +81,12 @@ export default function TLOBApp() {
       console.warn(`[Data Integrity] Removed ${orphaned.length} orphaned attendance record(s) with invalid eventIds`, orphaned);
     }
   }, [events, attendance, setAttendance]);
+
+  useEffect(() => {
+    if (!ownerId || !membersHydrated || !attendanceHydrated || members.length === 0) return;
+    const reconciled = reconcileMemberActivity(members, attendance);
+    if (reconciled !== members) setMembers(reconciled);
+  }, [ownerId, membersHydrated, attendanceHydrated, members, attendance, setMembers]);
 
   useEffect(() => {
     const update = () => setIsFullscreen(Boolean(document.fullscreenElement));

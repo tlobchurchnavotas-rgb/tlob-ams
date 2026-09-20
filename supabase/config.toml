@@ -1,2 +1,5 @@
 [functions.self-register]
 verify_jwt = true
+
+[functions.member-reengagement]
+verify_jwt = false

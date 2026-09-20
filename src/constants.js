@@ -258,6 +258,7 @@ function useSupabaseTable(tableName, initialArray, ownerId) {
       // Map camelCase -> snake_case for DB compatibility
       if (out.ageGroup !== undefined) { out.age_group = out.ageGroup; delete out.ageGroup; }
       if (out.sourceEventId !== undefined) { out.source_event_id = out.sourceEventId; delete out.sourceEventId; }
+      if (out.inactiveSince !== undefined) { out.inactive_since = out.inactiveSince; delete out.inactiveSince; }
       return out;
     }
     if (tableName === "events") {
@@ -294,6 +295,7 @@ function useSupabaseTable(tableName, initialArray, ownerId) {
       if (out.created_at !== undefined) { out.createdAt = out.created_at; delete out.created_at; }
       if (out.age_group !== undefined) { out.ageGroup = out.age_group; delete out.age_group; }
       if (out.source_event_id !== undefined) { out.sourceEventId = out.source_event_id; delete out.source_event_id; }
+      if (out.inactive_since !== undefined) { out.inactiveSince = out.inactive_since; delete out.inactive_since; }
       return out;
     }
     if (tableName === "attendance") {
@@ -448,8 +450,8 @@ function useSupabaseTable(tableName, initialArray, ownerId) {
         const code = String(upErr?.code || "");
 
         // PostgREST: schema cache missing column
-        if (code === "PGRST204" && tableName === "members" && (msg.includes("age_group") || msg.includes("source_event_id"))) {
-          const stripped = changed.map(({ age_group, source_event_id, ...rest }) => rest);
+        if (code === "PGRST204" && tableName === "members" && (msg.includes("age_group") || msg.includes("source_event_id") || msg.includes("inactive_since"))) {
+          const stripped = changed.map(({ age_group, source_event_id, inactive_since, ...rest }) => rest);
           const { error: retryErr } = await supabase
             .from(tableName)
             .upsert(stripped, { onConflict: "owner_id,id" });
@@ -590,19 +592,30 @@ function useSupabaseTable(tableName, initialArray, ownerId) {
       )
       .subscribe();
 
-    const pollMs = tableName === "attendance" || tableName === "visitors" ? 3000 : 12000;
+    // Realtime handles normal updates. This slower fallback keeps the app usable
+    // if a browser temporarily loses its realtime connection without repeatedly
+    // downloading the entire table every few seconds.
+    const pollMs = 60000;
     const pollId = setInterval(() => {
       if (document.visibilityState === "hidden") return;
       pull().catch(() => {});
     }, pollMs);
 
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") pull().catch(() => {});
+    };
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    window.addEventListener("online", refreshWhenVisible);
+
     return () => {
       clearInterval(pollId);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      window.removeEventListener("online", refreshWhenVisible);
       supabase.removeChannel(channel);
     };
   }, [hydrated, ownerId, tableName, applyServerSnapshot]);
 
-  return [rows, setRowsUser, syncStatus];
+  return [rows, setRowsUser, syncStatus, hydrated];
 }
 
 // ─── AGE GROUPS ───────────────────────────────────────────────────────────────
