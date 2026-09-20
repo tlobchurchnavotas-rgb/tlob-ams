@@ -592,25 +592,53 @@ function useSupabaseTable(tableName, initialArray, ownerId) {
       )
       .subscribe();
 
-    // Realtime handles normal updates. This slower fallback keeps the app usable
-    // if a browser temporarily loses its realtime connection without repeatedly
-    // downloading the entire table every few seconds.
-    const pollMs = 60000;
+    // Realtime handles normal updates. The fallback poll is intentionally slow and
+    // disabled while the app is idle or not the active screen, to avoid needless
+    // full-table downloads in the background.
+    const pollMs = 5 * 60 * 1000;
+    const idleMs = 2 * 60 * 1000;
+    const lastActiveRef = { current: Date.now() };
+
+    const markActive = () => {
+      lastActiveRef.current = Date.now();
+    };
+
+    const shouldPoll = () => {
+      const activeEnough = Date.now() - lastActiveRef.current < idleMs;
+      return document.visibilityState === "visible" && document.hasFocus() && activeEnough;
+    };
+
     const pollId = setInterval(() => {
-      if (document.visibilityState === "hidden") return;
+      if (!shouldPoll()) return;
       pull().catch(() => {});
     }, pollMs);
 
     const refreshWhenVisible = () => {
-      if (document.visibilityState === "visible") pull().catch(() => {});
+      markActive();
+      if (shouldPoll()) pull().catch(() => {});
     };
+
     document.addEventListener("visibilitychange", refreshWhenVisible);
+    window.addEventListener("focus", refreshWhenVisible);
+    window.addEventListener("blur", refreshWhenVisible);
     window.addEventListener("online", refreshWhenVisible);
+    window.addEventListener("pointerdown", markActive, { passive: true });
+    window.addEventListener("keydown", markActive, { passive: true });
+    window.addEventListener("touchstart", markActive, { passive: true });
+    window.addEventListener("mousemove", markActive, { passive: true });
+    window.addEventListener("scroll", markActive, { passive: true });
 
     return () => {
       clearInterval(pollId);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
+      window.removeEventListener("focus", refreshWhenVisible);
+      window.removeEventListener("blur", refreshWhenVisible);
       window.removeEventListener("online", refreshWhenVisible);
+      window.removeEventListener("pointerdown", markActive);
+      window.removeEventListener("keydown", markActive);
+      window.removeEventListener("touchstart", markActive);
+      window.removeEventListener("mousemove", markActive);
+      window.removeEventListener("scroll", markActive);
       supabase.removeChannel(channel);
     };
   }, [hydrated, ownerId, tableName, applyServerSnapshot]);
