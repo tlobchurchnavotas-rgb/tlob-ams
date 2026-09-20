@@ -12,6 +12,15 @@ function subtractMonths(date, months) {
   return result;
 }
 
+function weekKey(date) {
+  const weekStart = new Date(date);
+  const day = weekStart.getDay();
+  const daysSinceMonday = (day + 6) % 7;
+  weekStart.setDate(weekStart.getDate() - daysSinceMonday);
+  weekStart.setHours(0, 0, 0, 0);
+  return weekStart.getTime();
+}
+
 function attendanceForMember(member, attendance) {
   return (attendance || [])
     .filter((record) => record.memberId === member.id)
@@ -34,12 +43,20 @@ export function getMemberActivityUpdate(member, attendance, now = new Date()) {
   if (member.status === "Inactive") {
     const recoveryStart = validDate(member.inactiveSince);
     if (!recoveryStart) return null;
-    const recoveryEvents = new Set(
-      records
-        .filter((record) => !recoveryStart || record.date > recoveryStart)
-        .map((record) => record.eventId || record.date.toISOString())
-    );
-    return recoveryEvents.size >= 2
+    const recoveryEventsByWeek = new Map();
+    records
+      .filter((record) => record.date > recoveryStart)
+      .forEach((record) => {
+        const week = weekKey(record.date);
+        const eventsInWeek = recoveryEventsByWeek.get(week) || new Set();
+        eventsInWeek.add(record.eventId || record.date.toISOString());
+        recoveryEventsByWeek.set(week, eventsInWeek);
+      });
+    const attendedWeeks = Array.from(recoveryEventsByWeek.keys()).sort((first, second) => first - second);
+    const hasConsecutiveWeeks = attendedWeeks.some((week, index) => (
+      index > 0 && week - attendedWeeks[index - 1] === 7 * 24 * 60 * 60 * 1000
+    ));
+    return hasConsecutiveWeeks
       ? { status: "Active", inactiveSince: null }
       : null;
   }

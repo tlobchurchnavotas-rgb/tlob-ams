@@ -35,7 +35,7 @@ set search_path = public
 as $$
 declare
   member_row public.members%rowtype;
-  distinct_events integer;
+  has_consecutive_weeks boolean;
 begin
   if new.member_id is null then
     return new;
@@ -49,13 +49,23 @@ begin
     return new;
   end if;
 
-  select count(distinct coalesce(event_id, id)) into distinct_events
-  from public.attendance
-  where owner_id = new.owner_id
-    and member_id = new.member_id
-    and timestamp > coalesce(member_row.inactive_since, '-infinity'::timestamptz);
+  with weekly_attendance as (
+    select distinct date_trunc('week', coalesce(events.date::timestamptz, attendance.timestamp)) as attendance_week
+    from public.attendance
+    left join public.events
+      on events.owner_id = attendance.owner_id and events.id = attendance.event_id
+    where attendance.owner_id = new.owner_id
+      and attendance.member_id = new.member_id
+      and attendance.timestamp > coalesce(member_row.inactive_since, '-infinity'::timestamptz)
+  )
+  select exists (
+    select 1
+    from weekly_attendance first_week
+    join weekly_attendance second_week
+      on second_week.attendance_week = first_week.attendance_week + interval '7 days'
+  ) into has_consecutive_weeks;
 
-  if distinct_events >= 2 then
+  if has_consecutive_weeks then
     update public.members
     set status = 'Active', inactive_since = null
     where owner_id = new.owner_id and id = new.member_id;
