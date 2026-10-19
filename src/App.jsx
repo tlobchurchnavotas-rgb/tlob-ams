@@ -44,15 +44,28 @@ export default function TLOBApp() {
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const ownerId = currentUser?.id ?? null;
-  const initialMembers = useMemo(() => (isSupabaseConfigured ? [] : SEED_MEMBERS), []);
-  const initialEvents = useMemo(() => (isSupabaseConfigured ? [] : SEED_EVENTS), []);
-  const initialAttendance = useMemo(() => (isSupabaseConfigured ? [] : SEED_ATTENDANCE), []);
-  const initialVisitors = useMemo(() => (isSupabaseConfigured ? [] : SEED_VISITORS), []);
+  const localResetScope = useMemo(() => {
+    if (isSupabaseConfigured) return "";
+    try { return localStorage.getItem("tlob_local_reset_scope") || ""; } catch { return ""; }
+  }, []);
+  const initialMembers = useMemo(() => {
+    if (isSupabaseConfigured || localResetScope === "all") return [];
+    if (localResetScope === "keep-members") {
+      try {
+        const stored = localStorage.getItem("tlob_local_reset_members");
+        return stored ? JSON.parse(stored) : SEED_MEMBERS;
+      } catch { return SEED_MEMBERS; }
+    }
+    return SEED_MEMBERS;
+  }, [localResetScope]);
+  const initialEvents = useMemo(() => (isSupabaseConfigured || localResetScope ? [] : SEED_EVENTS), [localResetScope]);
+  const initialAttendance = useMemo(() => (isSupabaseConfigured || localResetScope ? [] : SEED_ATTENDANCE), [localResetScope]);
+  const initialVisitors = useMemo(() => (isSupabaseConfigured || localResetScope ? [] : SEED_VISITORS), [localResetScope]);
 
   const [members, setMembers, membersSync, membersHydrated] = useSupabaseTable("members", initialMembers, ownerId);
-  const [events, setEvents, eventsSync] = useSupabaseTable("events", initialEvents, ownerId);
+  const [events, setEvents, eventsSync, eventsHydrated] = useSupabaseTable("events", initialEvents, ownerId);
   const [attendance, setAttendance, attendanceSync, attendanceHydrated] = useSupabaseTable("attendance", initialAttendance, ownerId);
-  const [visitors, setVisitors, visitorsSync] = useSupabaseTable("visitors", initialVisitors, ownerId);
+  const [visitors, setVisitors, visitorsSync, visitorsHydrated] = useSupabaseTable("visitors", initialVisitors, ownerId);
   const [emailStatusRows, setEmailStatusRows] = useState([]);
   const [darkMode, setDarkMode] = usePersisted("darkMode", true);
   const [completionPin, setCompletionPin] = usePersisted("completion_pin", "123456", ownerId);
@@ -415,6 +428,7 @@ export default function TLOBApp() {
           .app-header-action{order:3;}
           .app-header .app-sync-status{order:4;margin-left:auto;}
           .app-main-content{padding:12px !important;}
+          .backup-actions{grid-template-columns:1fr !important;max-width:100% !important;}
           .dashboard-chart-grid,.dashboard-trend-grid,.dashboard-two-col,.dashboard-three-col,.responsive-form-grid,.responsive-modal-grid,.profile-stats-grid,.settings-grid{grid-template-columns:1fr !important;grid-template-areas:"header" "profile" "public" "application" !important;}
           .analytics-comparison-grid{grid-template-columns:1fr !important;}
           .analytics-comparison-grid > [style*="grid-column"]{grid-column:span 1 !important;}
@@ -583,7 +597,7 @@ export default function TLOBApp() {
                   </div>
                 )
               )
-            : activeView === "adminSettings" ? <AdminSettingsView theme={theme} showNotif={showNotif} currentUser={currentUser} setCurrentUser={setCurrentUser} completionPin={completionPin} setCompletionPin={setCompletionPin} events={events} />
+            : activeView === "adminSettings" ? <AdminSettingsView theme={theme} darkMode={darkMode} setDarkMode={setDarkMode} showNotif={showNotif} currentUser={currentUser} setCurrentUser={setCurrentUser} completionPin={completionPin} setCompletionPin={setCompletionPin} events={events} members={members} attendance={attendance} visitors={visitors} setMembers={setMembers} setEvents={setEvents} setAttendance={setAttendance} setVisitors={setVisitors} backupReady={membersHydrated && eventsHydrated && attendanceHydrated && visitorsHydrated} />
             : null}
         </main>
       </div>

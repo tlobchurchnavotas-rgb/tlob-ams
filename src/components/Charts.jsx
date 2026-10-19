@@ -142,14 +142,16 @@ function LineChart({
     </svg>
   );
 }
-function DonutChart({ filled, total, color }) {
+function DonutChart({ filled, total, color, inactiveColor }) {
   const pct = total > 0 ? filled / total : 0;
   const r = 36, cx = 44, cy = 44, stroke = 10, circ = 2 * Math.PI * r;
+  const filledLength = pct * circ;
+  const remainingLength = circ - filledLength;
   return (
     <svg width={88} height={88}>
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#1e293b" strokeWidth={stroke} />
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={inactiveColor} strokeWidth={stroke} />
       <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={stroke}
-        strokeDasharray={`${pct * circ} ${circ}`} strokeDashoffset={circ * 0.25} strokeLinecap="round" style={{ transition: "stroke-dasharray 0.8s ease" }} />
+        strokeDasharray={`${filledLength} ${remainingLength}`} strokeDashoffset={circ * 0.25} strokeLinecap="round" style={{ transition: "stroke-dasharray 0.8s ease" }} />
       <text x={cx} y={cy + 5} textAnchor="middle" fill="white" fontSize="13" fontWeight="700">{Math.round(pct * 100)}%</text>
     </svg>
   );

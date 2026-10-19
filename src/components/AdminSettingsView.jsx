@@ -5,6 +5,132 @@ import { recordAuditLog } from "../auditLogs.js";
 import { usePersisted } from "../constants.js";
 import { QRCode } from "../utils/qr.js";
 import packageJson from "../../package.json";
+import JSZip from "jszip";
+import { canManageAccounts } from "../roles.js";
+
+const BACKUP_PAGE_SIZE = 1000;
+
+async function fetchAllRows(queryForPage, label) {
+  const rows = [];
+  for (let from = 0; ; from += BACKUP_PAGE_SIZE) {
+    const { data, error } = await queryForPage().range(from, from + BACKUP_PAGE_SIZE - 1);
+    if (error) throw new Error(`Could not back up ${label}: ${error.message}`);
+    rows.push(...(data || []));
+    if (!data || data.length < BACKUP_PAGE_SIZE) return rows;
+  }
+}
+
+function csvCell(value) {
+  const text = value != null && typeof value === "object" ? JSON.stringify(value) : String(value ?? "");
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function rowsToCsv(rows) {
+  const columns = [...new Set((rows || []).flatMap((row) => Object.keys(row || {})))];
+  if (!columns.length) return "";
+  return [columns.map(csvCell).join(","), ...(rows || []).map((row) => columns.map((key) => csvCell(row?.[key])).join(","))].join("\r\n");
+}
+
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let quoted = false;
+  const input = String(text || "").replace(/^\uFEFF/, "");
+
+  for (let index = 0; index < input.length; index += 1) {
+    const character = input[index];
+    if (quoted) {
+      if (character === '"' && input[index + 1] === '"') {
+        cell += '"';
+        index += 1;
+      } else if (character === '"') {
+        quoted = false;
+      } else {
+        cell += character;
+      }
+    } else if (character === '"') {
+      quoted = true;
+    } else if (character === ",") {
+      row.push(cell);
+      cell = "";
+    } else if (character === "\n" || character === "\r") {
+      if (character === "\r" && input[index + 1] === "\n") index += 1;
+      row.push(cell);
+      if (row.some((value) => value !== "")) rows.push(row);
+      row = [];
+      cell = "";
+    } else {
+      cell += character;
+    }
+  }
+  if (quoted) throw new Error("The CSV backup contains an unterminated quoted field.");
+  if (cell || row.length) {
+    row.push(cell);
+    if (row.some((value) => value !== "")) rows.push(row);
+  }
+  if (!rows.length) return [];
+
+  const headers = rows.shift().map((header) => header.trim());
+  if (headers.some((header) => !header)) throw new Error("The CSV backup contains an empty column name.");
+  return rows.map((values) => Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ""])));
+}
+
+function parseCsvDataset(text, name) {
+  return parseCsv(text).map((row) => Object.fromEntries(Object.entries(row).map(([key, value]) => {
+    if (value === "") return [key, null];
+    if (key === "value" || /^[{[]/.test(value)) {
+      try { return [key, JSON.parse(value)]; } catch {}
+    }
+    if (["archived", "converted_to_member", "member_card_qr"].includes(key)) {
+      if (value === "true") return [key, true];
+      if (value === "false") return [key, false];
+    }
+    return [key, value];
+  }))).filter((row) => Object.keys(row).length > 0 && (name === "settings" || Object.values(row).some((value) => value != null)));
+}
+
+function normalizeBackupRows(rows, dataset) {
+  if (!Array.isArray(rows)) throw new Error(`Backup dataset "${dataset}" must be an array.`);
+  return rows.map((source, index) => {
+    if (!source || typeof source !== "object" || Array.isArray(source) || !source.id) {
+      throw new Error(`Backup dataset "${dataset}" has an invalid row at position ${index + 1}.`);
+    }
+    const row = { ...source };
+    delete row.owner_id;
+    delete row.updated_at;
+    if (dataset === "members") {
+      if (row.created_at !== undefined) { row.createdAt = row.created_at; delete row.created_at; }
+      if (row.age_group !== undefined) { row.ageGroup = row.age_group; delete row.age_group; }
+      if (row.source_event_id !== undefined) { row.sourceEventId = row.source_event_id; delete row.source_event_id; }
+      if (row.inactive_since !== undefined) { row.inactiveSince = row.inactive_since; delete row.inactive_since; }
+    }
+    if (dataset === "attendance") {
+      if (row.member_id !== undefined) { row.memberId = row.member_id; delete row.member_id; }
+      if (row.visitor_id !== undefined) { row.visitorId = row.visitor_id; delete row.visitor_id; }
+      if (row.event_id !== undefined) { row.eventId = row.event_id; delete row.event_id; }
+      if (row.member_name !== undefined) { row.memberName = row.member_name; delete row.member_name; }
+      if (row.member_card_qr !== undefined) { row.memberCardQr = row.member_card_qr; delete row.member_card_qr; }
+    }
+    if (dataset === "visitors") {
+      if (row.event_id !== undefined) { row.eventId = row.event_id; delete row.event_id; }
+      if (row.invited_by !== undefined) { row.invitedBy = row.invited_by; delete row.invited_by; }
+      if (row.converted_to_member !== undefined) { row.convertedToMember = row.converted_to_member; delete row.converted_to_member; }
+    }
+    return row;
+  });
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 function deriveUsernameFromEmail(email) {
   const raw = (email || "").split("@")[0] || "";
@@ -28,7 +154,7 @@ function saveLocalProfile(userId, profile) {
   } catch {}
 }
 
-export default function AdminSettingsView({ theme, showNotif, currentUser, setCurrentUser, completionPin, setCompletionPin, events = [] }) {
+export default function AdminSettingsView({ theme, darkMode, setDarkMode, showNotif, currentUser, setCurrentUser, completionPin, setCompletionPin, events = [], members = [], attendance = [], visitors = [], setMembers, setEvents, setAttendance, setVisitors, backupReady = false }) {
   const userId = currentUser?.id ?? null;
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -38,7 +164,11 @@ export default function AdminSettingsView({ theme, showNotif, currentUser, setCu
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateInfo, setUpdateInfo] = useState(null);
   const [downloadingUpdate, setDownloadingUpdate] = useState(false);
+  const [creatingBackup, setCreatingBackup] = useState(false);
+  const [resettingData, setResettingData] = useState(false);
   const fileInputRef = useRef(null);
+  const jsonBackupInputRef = useRef(null);
+  const csvBackupInputRef = useRef(null);
   const [publicRegisterEnabled, setPublicRegisterEnabled] = usePersisted("public_register_enabled", true, userId);
   const [publicRegisterBaseUrl, setPublicRegisterBaseUrl] = usePersisted("public_register_base_url", "", userId);
   const [autoConvertAfterVisits, setAutoConvertAfterVisits] = usePersisted("auto_convert_after_visits", 2, userId);
@@ -186,6 +316,311 @@ export default function AdminSettingsView({ theme, showNotif, currentUser, setCu
       showNotif(`Error downloading update: ${error?.message || "Unknown error"}`, "error");
     } finally {
       setDownloadingUpdate(false);
+    }
+  };
+
+  const buildBackup = async () => {
+    const includeAuditLogs = canManageAccounts(currentUser?.role);
+    let datasets;
+    let settings;
+    let profile;
+    let auditLogs = [];
+
+    if (canUseDb) {
+      const ownedRows = (table) => fetchAllRows(
+        () => supabase.from(table).select("*").eq("owner_id", userId),
+        table,
+      );
+      const [backupMembers, backupEvents, backupAttendance, backupVisitors, profileResult, settingRows] = await Promise.all([
+        ownedRows("members"),
+        ownedRows("events"),
+        ownedRows("attendance"),
+        ownedRows("visitors"),
+        supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
+        fetchAllRows(
+          () => supabase.from("app_kv").select("key,value").eq("owner_id", userId),
+          "settings",
+        ),
+      ]);
+      if (profileResult.error) throw new Error(`Could not back up profile: ${profileResult.error.message}`);
+      datasets = { members: backupMembers, events: backupEvents, attendance: backupAttendance, visitors: backupVisitors };
+      settings = Object.fromEntries((settingRows || []).map(({ key, value }) => [key, value]));
+      profile = profileResult.data || null;
+      if (includeAuditLogs) {
+        auditLogs = await fetchAllRows(
+          () => supabase.from("audit_logs").select("*").order("created_at", { ascending: true }),
+          "audit logs",
+        );
+      }
+    } else {
+      datasets = { members, events, attendance, visitors };
+      const settingKeys = ["darkMode", "completion_pin", "public_register_enabled", "public_register_base_url", "auto_convert_after_visits", "event_templates"];
+      settings = {};
+      settingKeys.forEach((key) => {
+        try {
+          const raw = localStorage.getItem(`tlob_${key}`);
+          if (raw != null) settings[`tlob_${key}`] = JSON.parse(raw);
+        } catch {}
+      });
+      try {
+        const localProfile = localStorage.getItem(`tlob_profile_${userId}`);
+        profile = localProfile ? { ...currentUser, ...JSON.parse(localProfile) } : currentUser;
+      } catch {
+        profile = currentUser;
+      }
+      if (includeAuditLogs) {
+        try {
+          const raw = localStorage.getItem("tlob_audit_logs");
+          const parsed = raw ? JSON.parse(raw) : [];
+          auditLogs = Array.isArray(parsed) ? parsed : [];
+        } catch {
+          auditLogs = [];
+        }
+      }
+    }
+
+    settings = {
+      ...settings,
+      tlob_darkMode: Boolean(darkMode),
+      tlob_completion_pin: completionPin,
+      tlob_public_register_enabled: publicRegisterEnabled,
+      tlob_public_register_base_url: publicRegisterBaseUrl,
+      tlob_auto_convert_after_visits: autoConvertAfterVisits,
+    };
+
+    return {
+      format: "tlob-ams-backup",
+      version: 1,
+      generatedAt: new Date().toISOString(),
+      applicationVersion: packageJson.version,
+      account: { id: userId, email: currentUser?.email || "" },
+      included: { auditLogs: includeAuditLogs },
+      data: { ...datasets, profile: profile ? [profile] : [], settings, auditLogs },
+    };
+  };
+
+  const downloadJsonBackup = async () => {
+    if (!backupReady || creatingBackup) return;
+    setCreatingBackup(true);
+    try {
+      const backup = await buildBackup();
+      const date = new Date().toISOString().slice(0, 10);
+      downloadBlob(new Blob([JSON.stringify(backup, null, 2)], { type: "application/json;charset=utf-8" }), `tlob-ams-backup-${date}.json`);
+      showNotif("JSON backup downloaded.");
+    } catch (error) {
+      showNotif(error?.message || "Could not create backup.", "error");
+    } finally {
+      setCreatingBackup(false);
+    }
+  };
+
+  const downloadCsvBackup = async () => {
+    if (!backupReady || creatingBackup) return;
+    setCreatingBackup(true);
+    try {
+      const backup = await buildBackup();
+      const zip = new JSZip();
+      const { data } = backup;
+      ["members", "events", "attendance", "visitors", "profile", "auditLogs"].forEach((key) => {
+        if (key !== "auditLogs" || backup.included.auditLogs) {
+          zip.file(`${key}.csv`, `\uFEFF${rowsToCsv(data[key])}`);
+        }
+      });
+      zip.file("settings.csv", `\uFEFF${rowsToCsv(Object.entries(data.settings).map(([key, value]) => ({ key, value })))}`);
+      zip.file("README.txt", `TLOB AMS CSV backup\r\nGenerated: ${backup.generatedAt}\r\nApplication version: ${backup.applicationVersion}\r\nAudit logs included: ${backup.included.auditLogs ? "yes" : "no (current role does not have audit-log access)"}\r\nEach CSV file contains one dataset. JSON-valued cells are encoded as JSON text.\r\n`);
+      const blob = await zip.generateAsync({ type: "blob", mimeType: "application/zip" });
+      const date = new Date().toISOString().slice(0, 10);
+      downloadBlob(blob, `tlob-ams-csv-backup-${date}.zip`);
+      showNotif("CSV backup downloaded.");
+    } catch (error) {
+      showNotif(error?.message || "Could not create backup.", "error");
+    } finally {
+      setCreatingBackup(false);
+    }
+  };
+
+  const resetOwnData = async (includeMembers) => {
+    if (!backupReady || resettingData || creatingBackup) return;
+    const confirmed = window.prompt(
+      `This permanently deletes events, attendance, visitors, saved settings, and your audit history for ${currentUser?.email || "this account"}.${includeMembers ? " Member records will also be deleted." : " Member records will be kept."} Your profile and sign-in account will remain.\n\nType RESET to continue.`,
+    );
+    if (confirmed !== "RESET") return;
+
+    setResettingData(true);
+    try {
+      if (canUseDb) {
+        const { error } = await supabase.rpc("reset_own_ams_data", { p_include_members: includeMembers });
+        if (error) {
+          if (error.code === "PGRST202" || /reset_own_ams_data/i.test(error.message || "")) {
+            throw new Error("Reset options are not configured on the server yet. Run the updated supabase/reset_own_ams_data.sql in the Supabase SQL Editor, then try again.");
+          }
+          throw new Error(error.message || "The account data reset failed.");
+        }
+      } else {
+        for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+          const key = localStorage.key(index);
+          if (!key?.startsWith("tlob_") || key === `tlob_profile_${userId}` || key === "tlob_local_reset_scope" || key === "tlob_local_reset_members" || key === "tlob_audit_logs") continue;
+          localStorage.removeItem(key);
+        }
+        localStorage.setItem("tlob_local_reset_scope", includeMembers ? "all" : "keep-members");
+        if (includeMembers) {
+          localStorage.removeItem("tlob_local_reset_members");
+        } else {
+          localStorage.setItem("tlob_local_reset_members", JSON.stringify(members));
+        }
+        try {
+          const rawLogs = localStorage.getItem("tlob_audit_logs");
+          const logs = rawLogs ? JSON.parse(rawLogs) : [];
+          if (Array.isArray(logs) && userId) {
+            localStorage.setItem("tlob_audit_logs", JSON.stringify(logs.filter((entry) => entry?.actor_id !== userId)));
+          }
+        } catch {}
+      }
+
+      if (includeMembers) setMembers([]);
+      setEvents([]);
+      setAttendance([]);
+      setVisitors([]);
+      setDarkMode(true);
+      setCompletionPin("123456");
+      setPublicRegisterEnabled(true);
+      setPublicRegisterBaseUrl("");
+      setAutoConvertAfterVisits(2);
+      showNotif(includeMembers
+        ? "All AMS data, including member records, has been reset. Your profile and account were kept."
+        : "AMS data has been reset. Member records, profile, and account were kept.");
+    } catch (error) {
+      showNotif(error?.message || "Could not reset account data.", "error");
+    } finally {
+      setResettingData(false);
+    }
+  };
+
+  const readBackupFile = async (file) => {
+    const extension = file.name.toLowerCase().split(".").pop();
+    if (extension === "json") {
+      const backup = JSON.parse(await file.text());
+      if (backup?.format !== "tlob-ams-backup" || backup?.version !== 1 || !backup.data) {
+        throw new Error("This JSON file is not a supported TLOB AMS backup.");
+      }
+      return backup;
+    }
+    if (extension !== "zip") throw new Error("Choose a TLOB AMS JSON backup or CSV backup ZIP file.");
+
+    const zip = await JSZip.loadAsync(file);
+    const names = ["members", "events", "attendance", "visitors"];
+    const datasets = {};
+    for (const name of names) {
+      const entry = zip.file(`${name}.csv`);
+      if (!entry) throw new Error(`The CSV backup is missing ${name}.csv.`);
+      datasets[name] = parseCsvDataset(await entry.async("text"), name);
+    }
+    for (const name of ["profile", "auditLogs"]) {
+      const entry = zip.file(`${name}.csv`);
+      datasets[name] = entry ? parseCsvDataset(await entry.async("text"), name) : [];
+    }
+    const settingsFile = zip.file("settings.csv");
+    if (!settingsFile) throw new Error("The CSV backup is missing settings.csv.");
+    const settingRows = parseCsvDataset(await settingsFile.async("text"), "settings");
+    const settings = Object.fromEntries(settingRows.filter((row) => row.key).map((row) => [row.key, row.value]));
+    return { format: "tlob-ams-backup", version: 1, included: { auditLogs: Boolean(zip.file("auditLogs.csv")) }, data: { ...datasets, settings } };
+  };
+
+  const importBackup = async (event, expectedFormat) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    const extension = file.name.toLowerCase().split(".").pop();
+    const expectedExtension = expectedFormat === "json" ? "json" : "zip";
+    if (extension !== expectedExtension) {
+      showNotif(expectedFormat === "json" ? "Choose a JSON backup file." : "Choose a CSV backup ZIP file.", "error");
+      return;
+    }
+    if (!backupReady || creatingBackup) {
+      showNotif("Wait for app data to finish loading before importing a backup.", "warning");
+      return;
+    }
+
+    setCreatingBackup(true);
+    try {
+      const backup = await readBackupFile(file);
+      const requiredDatasets = ["members", "events", "attendance", "visitors"];
+      const restored = Object.fromEntries(requiredDatasets.map((name) => [name, normalizeBackupRows(backup.data?.[name], name)]));
+      const settings = backup.data?.settings;
+      if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
+        throw new Error("The backup settings section is missing or invalid.");
+      }
+      const profile = Array.isArray(backup.data?.profile) ? backup.data.profile[0] : null;
+      if (profile && typeof profile !== "object") throw new Error("The backup profile is invalid.");
+      const canRestoreAuditLogs = canManageAccounts(currentUser?.role) && backup.included?.auditLogs && Array.isArray(backup.data?.auditLogs);
+      const summary = requiredDatasets.map((name) => `${restored[name].length} ${name}`).join(", ");
+      const confirmed = window.confirm(`Restore this TLOB AMS backup? Current members, events, attendance, visitors, and saved settings will be replaced.\n\n${summary}${canRestoreAuditLogs ? `\n${backup.data.auditLogs.length} audit log records will be added if not already present.` : ""}\n\nThis cannot be undone.`);
+      if (!confirmed) return;
+
+      setMembers(restored.members);
+      setEvents(restored.events);
+      setAttendance(restored.attendance);
+      setVisitors(restored.visitors);
+
+      const settingValue = (key) => settings[`tlob_${key}`] ?? settings[key];
+      const restoredDarkMode = settingValue("darkMode");
+      const restoredPin = settingValue("completion_pin");
+      const restoredRegisterEnabled = settingValue("public_register_enabled");
+      const restoredRegisterUrl = settingValue("public_register_base_url");
+      const restoredAutoConvert = settingValue("auto_convert_after_visits");
+      if (typeof restoredDarkMode === "boolean") setDarkMode(restoredDarkMode);
+      if (restoredPin != null) setCompletionPin(String(restoredPin));
+      if (restoredRegisterEnabled != null) setPublicRegisterEnabled(Boolean(restoredRegisterEnabled));
+      if (restoredRegisterUrl != null) setPublicRegisterBaseUrl(String(restoredRegisterUrl));
+      if (restoredAutoConvert != null) setAutoConvertAfterVisits(Number(restoredAutoConvert));
+
+      if (canUseDb) {
+        const appSettings = Object.entries(settings).map(([key, value]) => ({ owner_id: userId, key, value }));
+        if (appSettings.length) {
+          const { error } = await supabase.from("app_kv").upsert(appSettings, { onConflict: "owner_id,key" });
+          if (error) throw new Error(`Data restored, but saved settings could not be written: ${error.message}`);
+        }
+        if (profile) {
+          const profilePayload = {
+            name: profile.name,
+            username: profile.username,
+            avatar_url: profile.avatar_url ?? profile.avatarUrl ?? null,
+          };
+          const { error } = await supabase.from("profiles").update(profilePayload).eq("id", userId);
+          if (error) throw new Error(`Data restored, but profile could not be written: ${error.message}`);
+          setForm({ name: profilePayload.name || "", username: profilePayload.username || "", avatarUrl: profilePayload.avatar_url || "" });
+          setCurrentUser((user) => user ? { ...user, name: profilePayload.name || user.name, username: profilePayload.username || user.username, avatarUrl: profilePayload.avatar_url || "" } : user);
+        }
+        if (canRestoreAuditLogs && backup.data.auditLogs.length) {
+          const { data: existing, error: existingError } = await supabase.from("audit_logs").select("id");
+          if (existingError) throw new Error(`Data restored, but audit logs could not be checked: ${existingError.message}`);
+          const existingIds = new Set((existing || []).map((row) => row.id));
+          const newLogs = backup.data.auditLogs.filter((row) => row?.id && !existingIds.has(row.id));
+          for (let index = 0; index < newLogs.length; index += 500) {
+            const { error } = await supabase.from("audit_logs").insert(newLogs.slice(index, index + 500));
+            if (error) throw new Error(`Data restored, but audit logs could not be imported: ${error.message}`);
+          }
+        }
+      } else {
+        Object.entries(settings).forEach(([key, value]) => {
+          try { localStorage.setItem(key.startsWith("tlob_") ? key : `tlob_${key}`, JSON.stringify(value)); } catch {}
+        });
+        if (profile) {
+          const avatarUrl = profile.avatarUrl ?? profile.avatar_url ?? "";
+          const localProfile = { name: profile.name || "", username: profile.username || "", avatarUrl };
+          saveLocalProfile(userId, localProfile);
+          setForm(localProfile);
+          setCurrentUser((user) => user ? { ...user, ...localProfile } : user);
+        }
+        if (canRestoreAuditLogs) {
+          try { localStorage.setItem("tlob_audit_logs", JSON.stringify(backup.data.auditLogs)); } catch {}
+        }
+      }
+      showNotif("Backup restored. Core data will sync to storage.");
+    } catch (error) {
+      showNotif(error?.message || "Could not import backup.", "error");
+    } finally {
+      setCreatingBackup(false);
     }
   };
 
@@ -574,6 +1009,43 @@ export default function AdminSettingsView({ theme, showNotif, currentUser, setCu
                 )}
               </button>
             )}
+          </div>
+        </div>
+        <div style={{ borderTop: `1px solid ${theme.border}`, marginTop: 18, paddingTop: 16 }}>
+          <div style={{ fontSize: 14, fontWeight: 800 }}>System backup</div>
+          <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 4, marginBottom: 12 }}>
+            Download or restore members, events, attendance, visitors, profile, and saved settings. CSV backups are ZIP archives containing separate files.
+          </div>
+          <input ref={jsonBackupInputRef} type="file" accept=".json,application/json" onChange={(event) => importBackup(event, "json")} style={{ display: "none" }} />
+          <input ref={csvBackupInputRef} type="file" accept=".zip,application/zip" onChange={(event) => importBackup(event, "csv")} style={{ display: "none" }} />
+          <div className="backup-actions" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10, maxWidth: 720 }}>
+            <button type="button" className="btn" onClick={() => jsonBackupInputRef.current?.click?.()} disabled={!backupReady || creatingBackup || resettingData} style={{ background: `${theme.warning}18`, color: theme.warning, border: `1px solid ${theme.warning}50`, padding: "10px 12px", borderRadius: 8, fontSize: 12, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7, minHeight: 46, width: "100%", textAlign: "center", lineHeight: 1.35, opacity: !backupReady || creatingBackup || resettingData ? 0.6 : 1 }}>
+              <Icon name="upload" size={15} /> {creatingBackup ? "Processing…" : "Import JSON"}
+            </button>
+            <button type="button" className="btn" onClick={() => csvBackupInputRef.current?.click?.()} disabled={!backupReady || creatingBackup || resettingData} style={{ background: `${theme.warning}18`, color: theme.warning, border: `1px solid ${theme.warning}50`, padding: "10px 12px", borderRadius: 8, fontSize: 12, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7, minHeight: 46, width: "100%", textAlign: "center", lineHeight: 1.35, opacity: !backupReady || creatingBackup || resettingData ? 0.6 : 1 }}>
+              <Icon name="upload" size={15} /> {creatingBackup ? "Processing…" : "Import CSV"}
+            </button>
+            <button type="button" className="btn" onClick={downloadJsonBackup} disabled={!backupReady || creatingBackup || resettingData} style={{ background: theme.accent, color: "white", padding: "10px 12px", borderRadius: 8, fontSize: 12, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7, minHeight: 46, width: "100%", textAlign: "center", lineHeight: 1.35, opacity: !backupReady || creatingBackup || resettingData ? 0.6 : 1 }}>
+              <Icon name="download" size={15} /> Download JSON backup
+            </button>
+            <button type="button" className="btn" onClick={downloadCsvBackup} disabled={!backupReady || creatingBackup || resettingData} style={{ background: theme.surface2, color: theme.text, border: `1px solid ${theme.border}`, padding: "10px 12px", borderRadius: 8, fontSize: 12, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7, minHeight: 46, width: "100%", textAlign: "center", lineHeight: 1.35, opacity: !backupReady || creatingBackup || resettingData ? 0.6 : 1 }}>
+              <Icon name="download" size={15} /> Download CSV backup (.zip)
+            </button>
+          </div>
+          {!backupReady && <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 8 }}>Waiting for data to finish loading…</div>}
+          <div style={{ borderTop: `1px solid ${theme.border}`, marginTop: 16, paddingTop: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 700 }}>Reset my account data</div>
+            <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 4, marginBottom: 10 }}>
+              Choose whether to keep member records. Both options clear events, attendance, visitors, saved settings, and your audit history. Your profile and sign-in account are kept.
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button type="button" className="btn" onClick={() => resetOwnData(false)} disabled={!backupReady || creatingBackup || resettingData} style={{ background: `${theme.warning}18`, color: theme.warning, border: `1px solid ${theme.warning}55`, padding: "10px 14px", borderRadius: 8, fontSize: 12, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7, minHeight: 42, opacity: !backupReady || creatingBackup || resettingData ? 0.6 : 1 }}>
+                <Icon name="refresh" size={15} /> {resettingData ? "Resetting…" : "Reset data (keep members)"}
+              </button>
+              <button type="button" className="btn" onClick={() => resetOwnData(true)} disabled={!backupReady || creatingBackup || resettingData} style={{ background: `${theme.danger}18`, color: theme.danger, border: `1px solid ${theme.danger}55`, padding: "10px 14px", borderRadius: 8, fontSize: 12, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7, minHeight: 42, opacity: !backupReady || creatingBackup || resettingData ? 0.6 : 1 }}>
+                <Icon name="trash" size={15} /> {resettingData ? "Resetting…" : "Reset all data (including members)"}
+              </button>
+            </div>
           </div>
         </div>
       </div>

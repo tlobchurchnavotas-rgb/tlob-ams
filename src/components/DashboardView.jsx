@@ -465,7 +465,7 @@ function DashboardView({ members, events, attendance, emailStatusRows = [], them
         <div className="card" style={{ minWidth: 0, background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 13, padding: 18 }}>
           <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 3 }}>Member Status</div>
           <div style={{ fontSize: 11, color: theme.textMuted, marginBottom: 10 }}>Active vs Inactive</div>
-          <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}><DonutChart filled={active} total={total} color={theme.success} /></div>
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}><DonutChart filled={active} total={total} color={theme.success} inactiveColor={theme.danger} /></div>
           <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: theme.textMuted }}><div style={{ width: 7, height: 7, borderRadius: "50%", background: theme.success }} />Active: {active}</div>
             <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: theme.textMuted }}><div style={{ width: 7, height: 7, borderRadius: "50%", background: theme.danger }} />Inactive: {total - active}</div>
