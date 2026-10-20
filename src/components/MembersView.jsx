@@ -6,6 +6,7 @@ import { getQRDataUrl, getQRCardJpgDataUrl, downloadDataUrl } from "../utils/qr.
 import { CHURCH_LOGO_SRC, AGE_GROUPS, MINISTRY_OPTIONS, normalizeJoinedDate, getJoinedDateRange, formatJoinedForDisplay, getRecordDate, isRecordedWithinFilter } from "../constants.js";
 import { canManageChurchData } from "../roles.js";
 import { recordAuditLog } from "../auditLogs.js";
+import { preparePhoto } from "../utils/preparePhoto.js";
 
 const splitMinistries = (value) => {
   if (Array.isArray(value)) return value.map((item) => String(item || "").trim()).filter(Boolean);
@@ -215,12 +216,16 @@ function MembersView({ members, setMembers, events, theme, showNotif, currentUse
     setShowModal(true);
   };
 
-  const handlePhotoUpload = e => {
+  const handlePhotoUpload = async (e) => {
     const file = e.target.files[0];
+    e.target.value = "";
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => setForm(f => ({ ...f, photo: ev.target.result }));
-    reader.readAsDataURL(file);
+    try {
+      const photo = await preparePhoto(file);
+      setForm((f) => ({ ...f, photo }));
+    } catch (error) {
+      showNotif(error?.message || "Could not process that image.", "error");
+    }
   };
 
   const handleSave = async () => {
@@ -629,6 +634,7 @@ function MembersView({ members, setMembers, events, theme, showNotif, currentUse
                   <input type="file" accept="image/*" onChange={handlePhotoUpload} style={{ display: "none" }} />
                 </label>
                 {form.photo && <button className="btn" onClick={() => setForm(f => ({ ...f, photo: null }))} style={{ marginLeft: 8, background: "transparent", color: theme.danger, fontSize: 11, padding: 0 }}>Remove</button>}
+                <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 6 }}>Saved as a small square preview so member photos stay within the Free plan.</div>
               </div>
             </div>
             <div className="responsive-form-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 13 }}>

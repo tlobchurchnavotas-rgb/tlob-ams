@@ -7,6 +7,7 @@ import { QRCode } from "../utils/qr.js";
 import packageJson from "../../package.json";
 import JSZip from "jszip";
 import { canManageAccounts } from "../roles.js";
+import { preparePhoto } from "../utils/preparePhoto.js";
 
 const BACKUP_PAGE_SIZE = 1000;
 
@@ -239,23 +240,14 @@ export default function AdminSettingsView({ theme, darkMode, setDarkMode, showNo
 
   const onFileChange = async (e) => {
     const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file) return;
     if (!file.type?.startsWith("image/")) {
       showNotif("Please select an image file.", "error");
       return;
     }
-    const maxBytes = 300 * 1024;
-    if (file.size > maxBytes) {
-      showNotif("Image is too large. Please use an image under 300KB.", "error");
-      return;
-    }
     try {
-      const dataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onerror = () => reject(new Error("read failed"));
-        reader.onload = () => resolve(String(reader.result || ""));
-        reader.readAsDataURL(file);
-      });
+      const dataUrl = await preparePhoto(file, { size: 160, quality: 0.82 });
       setForm((f) => ({ ...f, avatarUrl: dataUrl }));
     } catch {
       showNotif("Could not read image file.", "error");

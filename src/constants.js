@@ -569,7 +569,60 @@ function useSupabaseTable(tableName, initialArray, ownerId) {
     if (!hydrated) return;
     if (!isSupabaseConfigured || !supabase || !ownerId) return;
 
-    const pull = async () => {
+    const applyRealtimeChange = (payload) => {
+      const eventType = payload?.eventType;
+      const raw = eventType === "DELETE" ? payload?.old : payload?.new;
+      if (!raw) return;
+      const [row] = rowsFromDb([raw]);
+      const local = latestRowsRef.current || [];
+      const id = raw.id || row?.id;
+      if (!id) return;
+
+      if (eventType === "DELETE") {
+        if (!local.some((item) => item?.id === id)) return;
+        const next = local.filter((item) => item?.id !== id);
+        if (!userChangedRef.current) {
+          lastSyncedIdsRef.current.delete(id);
+          lastSyncedFingerprintRef.current.delete(id);
+        }
+        latestRowsRef.current = next;
+        setRows(next);
+        return;
+      }
+
+      if (!row?.id) return;
+      const idx = local.findIndex((item) => item?.id === row.id);
+      if (userChangedRef.current) {
+        if (idx === -1) {
+          const next = [...local, row];
+          latestRowsRef.current = next;
+          setRows(next);
+        }
+        return;
+      }
+
+      const fp = JSON.stringify(toDbRow(row));
+      if (idx === -1) {
+        const next = [...local, row];
+        lastSyncedIdsRef.current.add(row.id);
+        lastSyncedFingerprintRef.current.set(row.id, fp);
+        latestRowsRef.current = next;
+        setRows(next);
+        return;
+      }
+      if (lastSyncedFingerprintRef.current.get(row.id) === fp) return;
+      const next = local.slice();
+      next[idx] = row;
+      lastSyncedFingerprintRef.current.set(row.id, fp);
+      latestRowsRef.current = next;
+      setRows(next);
+    };
+
+    let lastPullAt = 0;
+    const pull = async ({ force = false } = {}) => {
+      const now = Date.now();
+      if (!force && now - lastPullAt < 2 * 60 * 1000) return;
+      lastPullAt = now;
       const { data, error } = await supabase
         .from(tableName)
         .select("*")
@@ -588,14 +641,13 @@ function useSupabaseTable(tableName, initialArray, ownerId) {
           table: tableName,
           filter: `owner_id=eq.${ownerId}`,
         },
-        () => { pull().catch(() => {}); },
+        (payload) => { applyRealtimeChange(payload); },
       )
       .subscribe();
 
-    // Realtime handles normal updates. The fallback poll is intentionally slow and
-    // disabled while the app is idle or not the active screen, to avoid needless
-    // full-table downloads in the background.
-    const pollMs = 5 * 60 * 1000;
+    // Realtime patches one row at a time. Full-table downloads are only a
+    // reconnect/visibility safety net so idle kiosk windows do not burn egress.
+    const pollMs = 15 * 60 * 1000;
     const idleMs = 2 * 60 * 1000;
     const lastActiveRef = { current: Date.now() };
 
@@ -613,15 +665,17 @@ function useSupabaseTable(tableName, initialArray, ownerId) {
       pull().catch(() => {});
     }, pollMs);
 
-    const refreshWhenVisible = () => {
+    const onVisibility = () => {
       markActive();
-      if (shouldPoll()) pull().catch(() => {});
+      if (document.visibilityState === "visible") pull().catch(() => {});
+    };
+    const onOnline = () => {
+      markActive();
+      pull().catch(() => {});
     };
 
-    document.addEventListener("visibilitychange", refreshWhenVisible);
-    window.addEventListener("focus", refreshWhenVisible);
-    window.addEventListener("blur", refreshWhenVisible);
-    window.addEventListener("online", refreshWhenVisible);
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("online", onOnline);
     window.addEventListener("pointerdown", markActive, { passive: true });
     window.addEventListener("keydown", markActive, { passive: true });
     window.addEventListener("touchstart", markActive, { passive: true });
@@ -630,10 +684,8 @@ function useSupabaseTable(tableName, initialArray, ownerId) {
 
     return () => {
       clearInterval(pollId);
-      document.removeEventListener("visibilitychange", refreshWhenVisible);
-      window.removeEventListener("focus", refreshWhenVisible);
-      window.removeEventListener("blur", refreshWhenVisible);
-      window.removeEventListener("online", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("online", onOnline);
       window.removeEventListener("pointerdown", markActive);
       window.removeEventListener("keydown", markActive);
       window.removeEventListener("touchstart", markActive);
@@ -641,7 +693,7 @@ function useSupabaseTable(tableName, initialArray, ownerId) {
       window.removeEventListener("scroll", markActive);
       supabase.removeChannel(channel);
     };
-  }, [hydrated, ownerId, tableName, applyServerSnapshot]);
+  }, [hydrated, ownerId, tableName, applyServerSnapshot, rowsFromDb, toDbRow]);
 
   return [rows, setRowsUser, syncStatus, hydrated];
 }

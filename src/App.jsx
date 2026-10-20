@@ -82,24 +82,26 @@ export default function TLOBApp() {
 
   // Auto-clean orphaned attendance records (permanent fix for bug where records appear without scanning)
   useEffect(() => {
+    if (!eventsHydrated || !attendanceHydrated) return;
     if (attendance.length === 0 || events.length === 0) return;
-    
+
     const validEventIds = new Set(events.map(e => e.id));
     const orphaned = attendance.filter(a => a.eventId && !validEventIds.has(a.eventId));
-    
+
     if (orphaned.length > 0) {
-      // Silently remove orphaned records
       const cleaned = attendance.filter(a => validEventIds.has(a.eventId));
       setAttendance(cleaned);
-      // Log for debugging
       console.warn(`[Data Integrity] Removed ${orphaned.length} orphaned attendance record(s) with invalid eventIds`, orphaned);
     }
-  }, [events, attendance, setAttendance]);
+  }, [eventsHydrated, attendanceHydrated, events, attendance, setAttendance]);
 
   useEffect(() => {
     if (!ownerId || !membersHydrated || !attendanceHydrated || members.length === 0) return;
-    const reconciled = reconcileMemberActivity(members, attendance);
-    if (reconciled !== members) setMembers(reconciled);
+    const timer = setTimeout(() => {
+      const reconciled = reconcileMemberActivity(members, attendance);
+      if (reconciled !== members) setMembers(reconciled);
+    }, 800);
+    return () => clearTimeout(timer);
   }, [ownerId, membersHydrated, attendanceHydrated, members, attendance, setMembers]);
 
   useEffect(() => {
@@ -109,11 +111,12 @@ export default function TLOBApp() {
     }
     let cancelled = false;
     const loadEmailStatuses = async () => {
+      if (document.visibilityState === "hidden") return;
       const { data, error } = await supabase.rpc("get_member_reengagement_status");
       if (!cancelled && !error) setEmailStatusRows(data || []);
     };
     loadEmailStatuses();
-    const refreshId = setInterval(loadEmailStatuses, 60000);
+    const refreshId = setInterval(loadEmailStatuses, 10 * 60 * 1000);
     return () => {
       cancelled = true;
       clearInterval(refreshId);
