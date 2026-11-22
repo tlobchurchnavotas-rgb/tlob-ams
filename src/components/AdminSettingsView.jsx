@@ -103,6 +103,7 @@ function normalizeBackupRows(rows, dataset) {
     if (dataset === "members") {
       if (row.created_at !== undefined) { row.createdAt = row.created_at; delete row.created_at; }
       if (row.age_group !== undefined) { row.ageGroup = row.age_group; delete row.age_group; }
+      if (row.attendance_group !== undefined) { row.attendanceGroup = row.attendance_group; delete row.attendance_group; }
       if (row.source_event_id !== undefined) { row.sourceEventId = row.source_event_id; delete row.source_event_id; }
       if (row.inactive_since !== undefined) { row.inactiveSince = row.inactive_since; delete row.inactive_since; }
     }

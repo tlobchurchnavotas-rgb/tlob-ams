@@ -257,6 +257,7 @@ function useSupabaseTable(tableName, initialArray, ownerId) {
       out.anniversary = normalizeDate(out.anniversary);
       // Map camelCase -> snake_case for DB compatibility
       if (out.ageGroup !== undefined) { out.age_group = out.ageGroup; delete out.ageGroup; }
+      if (out.attendanceGroup !== undefined) { out.attendance_group = out.attendanceGroup; delete out.attendanceGroup; }
       if (out.sourceEventId !== undefined) { out.source_event_id = out.sourceEventId; delete out.sourceEventId; }
       if (out.inactiveSince !== undefined) { out.inactive_since = out.inactiveSince; delete out.inactiveSince; }
       return out;
@@ -294,6 +295,7 @@ function useSupabaseTable(tableName, initialArray, ownerId) {
       const out = { ...r };
       if (out.created_at !== undefined) { out.createdAt = out.created_at; delete out.created_at; }
       if (out.age_group !== undefined) { out.ageGroup = out.age_group; delete out.age_group; }
+      if (out.attendance_group !== undefined) { out.attendanceGroup = out.attendance_group; delete out.attendance_group; }
       if (out.source_event_id !== undefined) { out.sourceEventId = out.source_event_id; delete out.source_event_id; }
       if (out.inactive_since !== undefined) { out.inactiveSince = out.inactive_since; delete out.inactive_since; }
       return out;
@@ -450,8 +452,8 @@ function useSupabaseTable(tableName, initialArray, ownerId) {
         const code = String(upErr?.code || "");
 
         // PostgREST: schema cache missing column
-        if (code === "PGRST204" && tableName === "members" && (msg.includes("age_group") || msg.includes("source_event_id") || msg.includes("inactive_since"))) {
-          const stripped = changed.map(({ age_group, source_event_id, inactive_since, ...rest }) => rest);
+        if (code === "PGRST204" && tableName === "members" && (msg.includes("age_group") || msg.includes("attendance_group") || msg.includes("source_event_id") || msg.includes("inactive_since"))) {
+          const stripped = changed.map(({ age_group, attendance_group, source_event_id, inactive_since, ...rest }) => rest);
           const { error: retryErr } = await supabase
             .from(tableName)
             .upsert(stripped, { onConflict: "owner_id,id" });

@@ -116,7 +116,20 @@ function AttendanceAnalyticsView({ attendance, members, events, theme }) {
     const monthRows = takeRange(m0, m1);
     const prevMonthRows = takeRange(mPrev0, mPrev1);
 
-    const count = (rows) => rows.length;
+    const memberById = new Map((members || []).map((member) => [member?.id, member]).filter(([id]) => id));
+    const isLeader = (row) => (memberById.get(row?.memberId)?.attendanceGroup || "Attendee") === "Church Leader";
+    const classifyRows = (rows) => {
+      const leaders = rows.filter(isLeader);
+      return {
+        total: rows.length,
+        uniqueMembers: uniqueCount(rows, "memberId"),
+        leaders: leaders.length,
+        attendees: rows.length - leaders.length,
+        uniqueLeaders: uniqueCount(leaders, "memberId"),
+        uniqueAttendees: uniqueCount(rows.filter((row) => !isLeader(row)), "memberId"),
+      };
+    };
+
 
     // Per-day breakdown for the selected week (bars)
     const weekByDay = Array.from({ length: 7 }, (_, i) => {
@@ -127,6 +140,8 @@ function AttendanceAnalyticsView({ attendance, members, events, theme }) {
         label: d0.toLocaleDateString([], { weekday: "short" }),
         date: d0,
         total: rows.length,
+        leaders: rows.filter(isLeader).length,
+        attendees: rows.filter((row) => !isLeader(row)).length,
         uniqueMembers: uniqueCount(rows, "memberId"),
         uniqueEvents: uniqueCount(rows, "eventId"),
       };
@@ -147,6 +162,8 @@ function AttendanceAnalyticsView({ attendance, members, events, theme }) {
           start: a0,
           end: a1,
           total: rows.length,
+          leaders: rows.filter(isLeader).length,
+          attendees: rows.filter((row) => !isLeader(row)).length,
           uniqueMembers: uniqueCount(rows, "memberId"),
           uniqueEvents: uniqueCount(rows, "eventId"),
         });
@@ -183,24 +200,21 @@ function AttendanceAnalyticsView({ attendance, members, events, theme }) {
       ref,
       ranges: { w0, w1, wPrev0, wPrev1, m0, m1, mPrev0, mPrev1 },
       week: {
-        total: count(weekRows),
-        uniqueMembers: uniqueCount(weekRows, "memberId"),
+        ...classifyRows(weekRows),
         uniqueEvents: uniqueCount(weekRows, "eventId"),
       },
       prevWeek: {
-        total: count(prevWeekRows),
-        uniqueMembers: uniqueCount(prevWeekRows, "memberId"),
+        ...classifyRows(prevWeekRows),
         uniqueEvents: uniqueCount(prevWeekRows, "eventId"),
       },
       month: {
-        total: count(monthRows),
+        ...classifyRows(monthRows),
         uniqueMembers: monthUniqueMembers,
         uniqueEvents: uniqueCount(monthRows, "eventId"),
         coveragePct: monthCoverage,
       },
       prevMonth: {
-        total: count(prevMonthRows),
-        uniqueMembers: uniqueCount(prevMonthRows, "memberId"),
+        ...classifyRows(prevMonthRows),
         uniqueEvents: uniqueCount(prevMonthRows, "eventId"),
       },
       weekByDay,
@@ -526,7 +540,9 @@ function AttendanceAnalyticsView({ attendance, members, events, theme }) {
             value={stats.week.total}
             sub={
               <span>
-                Unique members: <strong style={{ color: theme.text }}>{stats.week.uniqueMembers}</strong> • Unique events:{" "}
+                Unique members: <strong style={{ color: theme.text }}>{stats.week.uniqueMembers}</strong> •
+                Leaders: <strong style={{ color: theme.accent }}>{stats.week.leaders}</strong> •
+                Attendees: <strong style={{ color: theme.success }}>{stats.week.attendees}</strong> • Unique events:{" "}
                 <strong style={{ color: theme.text }}>{stats.week.uniqueEvents}</strong> • <DeltaPill current={stats.week.total} previous={stats.prevWeek.total} />
               </span>
             }
@@ -540,8 +556,9 @@ function AttendanceAnalyticsView({ attendance, members, events, theme }) {
             sub={
               <span>
                 Unique members: <strong style={{ color: theme.text }}>{stats.month.uniqueMembers}</strong> /{" "}
-                <strong style={{ color: theme.text }}>{stats.totals.members || "—"}</strong> • Coverage:{" "}
-                <strong style={{ color: theme.text }}>{stats.totals.members ? `${stats.month.coveragePct.toFixed(1)}%` : "—"}</strong> •{" "}
+                <strong style={{ color: theme.text }}>{stats.totals.members || "—"}</strong> •
+                Leaders: <strong style={{ color: theme.accent }}>{stats.month.leaders}</strong> •
+                Attendees: <strong style={{ color: theme.success }}>{stats.month.attendees}</strong> • Coverage:{" "}                <strong style={{ color: theme.text }}>{stats.totals.members ? `${stats.month.coveragePct.toFixed(1)}%` : "—"}</strong> •{" "}
                 <DeltaPill current={stats.month.total} previous={stats.prevMonth.total} />
               </span>
             }

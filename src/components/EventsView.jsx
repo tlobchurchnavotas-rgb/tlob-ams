@@ -19,7 +19,7 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, vis
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
   const [selectedEventForAttendance, setSelectedEventForAttendance] = useState(null);
   const [attendanceSearchQuery, setAttendanceSearchQuery] = useState("");
-  const [attendanceListTab, setAttendanceListTab] = useState("members");
+  const [attendanceListTab, setAttendanceListTab] = useState("all");
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [templateToDelete, setTemplateToDelete] = useState(null);
   const [eventToDelete, setEventToDelete] = useState(null);
@@ -276,22 +276,24 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, vis
       <div style={{ fontWeight: 600, fontSize: 14 }}>{ev.name}</div>
       <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 3 }}>{ev.type}</div>
       <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 5 }}>{ev.date} • {ev.time}</div>
-      {ev.status === "Completed" && (
-        <div style={{ fontSize: 12, color: theme.success, marginTop: 6, fontWeight: 500, display: "flex", alignItems: "center", gap: 5 }}>
-          <Icon name="check" size={14} /> {getAttendanceCount(ev.id)} attendance
-          {(() => {
-            const recs = getAttendanceRecords(ev.id);
-            const visitorsPresent = recs.filter(r => r.kind === "visitor").length;
-            const membersPresent = recs.filter(r => r.kind === "member").length;
-            if (!visitorsPresent) return null;
-            return (
-              <span style={{ color: theme.textMuted, fontWeight: 400 }}>
-                ({membersPresent} members • {visitorsPresent} visitors)
-              </span>
-            );
-          })()}
-        </div>
-      )}
+      {ev.status === "Completed" && (() => {
+        const recs = getAttendanceRecords(ev.id);
+        const leaders = recs.filter(r => r.kind === "member" && r.attendanceGroup === "Church Leader").length;
+        const attendees = recs.filter(r => r.kind === "member" && r.attendanceGroup !== "Church Leader").length;
+        const visitors = recs.filter(r => r.kind === "visitor").length;
+        return (
+          <div style={{ marginTop: 6 }}>
+            <div style={{ fontSize: 12, color: theme.success, fontWeight: 600, display: "flex", alignItems: "center", gap: 5 }}>
+              <Icon name="check" size={14} /> {recs.length} Total Attendance
+            </div>
+            <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginTop: 5, fontSize: 10 }}>
+              <span style={{ color: theme.accent, background: `${theme.accent}12`, borderRadius: 999, padding: "3px 7px", fontWeight: 700 }}>Leaders: {leaders}</span>
+              <span style={{ color: theme.success, background: `${theme.success}12`, borderRadius: 999, padding: "3px 7px", fontWeight: 700 }}>Attendees: {attendees}</span>
+              <span style={{ color: theme.accent2, background: `${theme.accent2}12`, borderRadius: 999, padding: "3px 7px", fontWeight: 700 }}>Visitors: {visitors}</span>
+            </div>
+          </div>
+        );
+      })()}
       {canManageChurchData(currentUser.role) && (
         <div style={{ display: "flex", gap: 7, marginTop: 14 }}>
           {ev.status === "Upcoming" && <button className="btn" onClick={() => handleActivate(ev.id)} style={{ flex: 1, background: `${theme.success}15`, color: theme.success, padding: "6px", borderRadius: 7, fontSize: 12, fontWeight: 500 }}>Activate</button>}
@@ -503,12 +505,6 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, vis
     );
   };
 
-  const getAttendanceCount = (eventId) => {
-    // Validation filter: ensure events exist before counting
-    const validEventIds = new Set(events.map(e => e.id));
-    return attendance.filter(a => a.eventId === eventId && validEventIds.has(a.eventId)).length;
-  };
-
   const getAttendanceRecords = (eventId) => {
     const validMemberIds = new Set(members.map(m => m.id));
     const visitorById = new Map((visitors || []).map(v => [v.id, v]));
@@ -524,6 +520,7 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, vis
             memberName: member?.name || record.memberName || "Unknown",
             memberMinistriy: member?.ministry || "—",
             memberAgeGroup: member?.ageGroup || "—",
+            attendanceGroup: member?.attendanceGroup || "Attendee",
             contact: member?.contact || "—",
           };
         }
@@ -534,6 +531,7 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, vis
           memberName: visitor?.name || record.memberName || "Unknown",
           memberMinistriy: "Visitor",
           memberAgeGroup: "Visitor",
+          attendanceGroup: "Visitor",
           contact: visitor?.contact || "—",
         };
       });
@@ -542,7 +540,7 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, vis
   const openAttendanceModal = (event) => {
     setSelectedEventForAttendance(event);
     setAttendanceSearchQuery("");
-    setAttendanceListTab("members");
+    setAttendanceListTab("all");
     setShowAttendanceModal(true);
   };
 
@@ -566,13 +564,25 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, vis
   };
 
   const getFilteredAttendanceRecords = (eventId, searchTerm, kind) => {
-    const recordKind = kind === "visitors" || kind === "visitor" ? "visitor" : "member";
-    const records = getAttendanceRecords(eventId).filter(record => record.kind === recordKind);
+    let records = getAttendanceRecords(eventId);
+    if (kind === "visitors" || kind === "visitor") {
+      records = records.filter(record => record.kind === "visitor");
+    } else if (kind === "leaders") {
+      records = records.filter(record => record.kind === "member" && record.attendanceGroup === "Church Leader");
+    } else if (kind === "attendees") {
+      records = records.filter(record => record.kind === "member" && record.attendanceGroup !== "Church Leader");
+    } else if (kind === "all") {
+      records = getAttendanceRecords(eventId);
+    } else {
+      records = records.filter(record => record.kind === "member");
+    }
     if (!searchTerm.trim()) return records;
     const q = searchTerm.toLowerCase();
     return records.filter(record =>
       record.memberName.toLowerCase().includes(q)
       || String(record.contact || "").toLowerCase().includes(q)
+      || String(record.memberMinistriy || "").toLowerCase().includes(q)
+      || String(record.attendanceGroup || "").toLowerCase().includes(q)
     );
   };
 
@@ -593,12 +603,14 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, vis
   const selectedAttendanceRecords = selectedEventForAttendance
     ? getAttendanceRecords(selectedEventForAttendance.id)
     : [];
-  const selectedMemberCount = selectedAttendanceRecords.filter(r => r.kind === "member").length;
   const selectedVisitorCount = selectedAttendanceRecords.filter(r => r.kind === "visitor").length;
+  const selectedLeaderCount = selectedAttendanceRecords.filter(r => r.kind === "member" && r.attendanceGroup === "Church Leader").length;
+  const selectedAttendeeCount = selectedAttendanceRecords.filter(r => r.kind === "member" && r.attendanceGroup !== "Church Leader").length;
   const filteredAttendanceRows = selectedEventForAttendance
     ? getFilteredAttendanceRecords(selectedEventForAttendance.id, attendanceSearchQuery, attendanceListTab)
     : [];
   const showingVisitors = attendanceListTab === "visitors";
+  const showingAll = attendanceListTab === "all";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
@@ -803,12 +815,16 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, vis
             {/* Stats Section */}
             <div style={{ background: theme.surface2, border: `1px solid ${theme.border}`, borderRadius: 10, padding: "10px 12px", marginBottom: 16, display: "flex", gap: 0, flexWrap: "wrap" }}>
               <div style={{ flex: 1, minWidth: 90, padding: "0 10px", borderRight: `1px solid ${theme.border}` }}>
-                <div style={{ fontSize: 11, color: theme.textMuted, textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.5px" }}>Total</div>
+                <div style={{ fontSize: 11, color: theme.textMuted, textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.5px" }}>Total Attendance</div>
                 <div style={{ fontSize: 18, fontWeight: 700, color: theme.accent, marginTop: 3 }}>{selectedAttendanceRecords.length}</div>
               </div>
               <div style={{ flex: 1, minWidth: 90, padding: "0 10px", borderRight: `1px solid ${theme.border}` }}>
-                <div style={{ fontSize: 11, color: theme.textMuted, textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.5px" }}>Members</div>
-                <div style={{ fontSize: 18, fontWeight: 700, color: theme.accent2, marginTop: 3 }}>{selectedMemberCount}</div>
+                <div style={{ fontSize: 11, color: theme.textMuted, textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.5px" }}>Church Leaders</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: theme.accent, marginTop: 3 }}>{selectedLeaderCount}</div>
+              </div>
+              <div style={{ flex: 1, minWidth: 90, padding: "0 10px", borderRight: `1px solid ${theme.border}` }}>
+                <div style={{ fontSize: 11, color: theme.textMuted, textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.5px" }}>Attendees</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: theme.success, marginTop: 3 }}>{selectedAttendeeCount}</div>
               </div>
               <div style={{ flex: 1, minWidth: 90, padding: "0 10px", borderRight: `1px solid ${theme.border}` }}>
                 <div style={{ fontSize: 11, color: theme.textMuted, textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.5px" }}>Visitors</div>
@@ -824,7 +840,9 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, vis
 
             <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
               {[
-                { id: "members", label: `Members (${selectedMemberCount})` },
+                { id: "all", label: `All Attendance (${selectedAttendanceRecords.length})` },
+                { id: "leaders", label: `Leaders (${selectedLeaderCount})` },
+                { id: "attendees", label: `Attendees (${selectedAttendeeCount})` },
                 { id: "visitors", label: `Visitors (${selectedVisitorCount})` },
               ].map(tab => (
                 <button
@@ -852,7 +870,7 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, vis
               <div style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: theme.textMuted, pointerEvents: "none" }}><Icon name="search" size={15} /></div>
               <input
                 type="text"
-                placeholder={showingVisitors ? "Search visitor..." : "Search attendee..."}
+                placeholder={showingVisitors ? "Search visitor..." : attendanceListTab === "leaders" ? "Search church leader..." : attendanceListTab === "attendees" ? "Search attendee..." : showingAll ? "Search all attendance..." : "Search member..."}
                 value={attendanceSearchQuery}
                 onChange={e => setAttendanceSearchQuery(e.target.value)}
                 style={{ width: "100%", paddingLeft: 38 }}
@@ -865,8 +883,9 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, vis
                 <thead>
                   <tr style={{ borderBottom: `1px solid ${theme.border}` }}>
                     <th style={{ padding: "12px 0", textAlign: "left", color: theme.textMuted, fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>#</th>
-                    <th style={{ padding: "12px 8px", textAlign: "left", color: theme.textMuted, fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>{showingVisitors ? "Visitor" : "Member"}</th>
+                    <th style={{ padding: "12px 8px", textAlign: "left", color: theme.textMuted, fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>{showingVisitors ? "Visitor" : showingAll ? "Name" : "Member"}</th>
                     <th style={{ padding: "12px 8px", textAlign: "left", color: theme.textMuted, fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>{showingVisitors ? "Contact" : "Ministry"}</th>
+                    {!showingVisitors && <th style={{ padding: "12px 8px", textAlign: "left", color: theme.textMuted, fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>Attendance Group</th>}
                     <th style={{ padding: "12px 8px", textAlign: "left", color: theme.textMuted, fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>Check-in</th>
                     <th style={{ padding: "12px 8px", textAlign: "left", color: theme.textMuted, fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>Status</th>
                     {canManageChurchData(currentUser.role) && <th style={{ padding: "12px 8px", textAlign: "center", color: theme.textMuted, fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>Action</th>}
@@ -878,6 +897,7 @@ function EventsView({ events, setEvents, attendance, setAttendance, members, vis
                       <td style={{ padding: "12px 0", color: theme.textMuted }}>{idx + 1}</td>
                       <td style={{ padding: "12px 8px", fontWeight: 500, color: theme.text }}>{record.memberName}</td>
                       <td style={{ padding: "12px 8px", color: theme.textMuted, fontSize: 12 }}>{showingVisitors ? (record.contact || "—") : record.memberMinistriy}</td>
+                      {!showingVisitors && <td style={{ padding: "12px 8px" }}><span style={{ background: `${record.attendanceGroup === "Church Leader" ? theme.accent : theme.success}18`, color: record.attendanceGroup === "Church Leader" ? theme.accent : theme.success, padding: "4px 8px", borderRadius: 6, fontSize: 11, fontWeight: 600 }}>{record.attendanceGroup}</span></td>}
                       <td style={{ padding: "12px 8px", color: theme.success, fontWeight: 500 }}>{record.timestamp ? new Date(record.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}</td>
                       <td style={{ padding: "12px 8px" }}><span style={{ background: `${theme.success}18`, color: theme.success, padding: "4px 8px", borderRadius: 6, fontSize: 11, fontWeight: 500 }}>Present</span></td>
                       {canManageChurchData(currentUser.role) && (

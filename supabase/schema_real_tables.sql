@@ -14,6 +14,7 @@ create table if not exists public.members (
   gender text,
   ministry text,
   age_group text,
+  attendance_group text not null default 'Attendee',
   source_event_id text,
   status text,
   joined text,
@@ -30,6 +31,7 @@ alter table public.members add column if not exists email text;
 
 alter table public.members add column if not exists source_event_id text;
 alter table public.members add column if not exists gender text;
+alter table public.members add column if not exists attendance_group text not null default 'Attendee';
 
 drop trigger if exists trg_members_updated_at on public.members;
 create trigger trg_members_updated_at

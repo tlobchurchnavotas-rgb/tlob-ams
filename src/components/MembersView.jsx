@@ -27,12 +27,13 @@ function MembersView({ members, setMembers, events, theme, showNotif, currentUse
   const [showArchived, setShowArchived] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editMember, setEditMember] = useState(null);
-  const [form, setForm] = useState({ name: "", contact: "", email: "", gender: "", ministry: [], ageGroup: "", status: "Active", joined: "", sourceEventId: "", photo: null, birthday: "", anniversary: "" });
+  const [form, setForm] = useState({ name: "", contact: "", email: "", gender: "", ministry: [], ageGroup: "", attendanceGroup: "Attendee", status: "Active", joined: "", sourceEventId: "", photo: null, birthday: "", anniversary: "" });
   const [showCSVModal, setShowCSVModal] = useState(false);
   const [showBulkPrintModal, setShowBulkPrintModal] = useState(false);
 
   const [filterMinistry, setFilterMinistry] = useState("All");
   const [filterAgeGroup, setFilterAgeGroup] = useState("All");
+  const [filterAttendanceGroup, setFilterAttendanceGroup] = useState("All");
   const [filterJoinedFrom, setFilterJoinedFrom] = useState("");
   const [filterJoinedTo, setFilterJoinedTo] = useState("");
   const [selectedArchivedIds, setSelectedArchivedIds] = useState(new Set());
@@ -56,6 +57,9 @@ function MembersView({ members, setMembers, events, theme, showNotif, currentUse
     if (filterAgeGroup !== "All" && (m.ageGroup || "") !== filterAgeGroup) {
       return false;
     }
+    if (filterAttendanceGroup !== "All" && (m.attendanceGroup || "Attendee") !== filterAttendanceGroup) {
+      return false;
+    }
     // Dates are stored as yyyy-mm-dd strings (ISO) so lexicographic compare works.
     if ((filterJoinedFrom || filterJoinedTo) && !isJoinedWithinFilter(m.joined, filterJoinedFrom, filterJoinedTo)) {
       return false;
@@ -70,6 +74,7 @@ function MembersView({ members, setMembers, events, theme, showNotif, currentUse
     if (showArchived) parts.push("Archived"); else parts.push("Active");
     if (filterMinistry !== "All") parts.push(`Ministry: ${filterMinistry}`);
     if (filterAgeGroup !== "All") parts.push(`Age Group: ${filterAgeGroup}`);
+    if (filterAttendanceGroup !== "All") parts.push(`Attendance Group: ${filterAttendanceGroup}`);
     if (filterJoinedFrom) parts.push(`Joined From: ${filterJoinedFrom}`);
     if (filterJoinedTo) parts.push(`Joined To: ${filterJoinedTo}`);
     if (search.trim()) parts.push(`Search: "${search.trim()}"`);
@@ -79,7 +84,7 @@ function MembersView({ members, setMembers, events, theme, showNotif, currentUse
   const downloadCsvForVisible = () => {
     if (!visible.length) { showNotif("No members to export", "warning"); return; }
 
-    const header = ["ID", "Name", "Contact", "Ministry", "Age Group", "Status", "Joined"];
+    const header = ["ID", "Name", "Contact", "Ministry", "Age Group", "Attendance Group", "Status", "Joined"];
     const escapeCsv = (v) => {
       const s = String(v ?? "");
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -90,6 +95,7 @@ function MembersView({ members, setMembers, events, theme, showNotif, currentUse
       m.contact || "",
       formatMinistry(m.ministry) || "",
       m.ageGroup || "",
+      m.attendanceGroup || "Attendee",
       m.archived ? "Archived" : (m.status || ""),
       m.joined || "",
     ].map(escapeCsv).join(",")));
@@ -207,12 +213,12 @@ function MembersView({ members, setMembers, events, theme, showNotif, currentUse
 
   const openAdd = () => {
     setEditMember(null);
-    setForm({ name: "", contact: "", email: "", gender: "", ministry: [], ageGroup: "", status: "Active", joined: "", sourceEventId: "", photo: null, birthday: "", anniversary: "" });
+    setForm({ name: "", contact: "", email: "", gender: "", ministry: [], ageGroup: "", attendanceGroup: "Attendee", status: "Active", joined: "", sourceEventId: "", photo: null, birthday: "", anniversary: "" });
     setShowModal(true);
   };
   const openEdit = m => {
     setEditMember(m);
-    setForm({ name: m.name, contact: m.contact, email: m.email || "", gender: m.gender || "", ministry: splitMinistries(m.ministry), ageGroup: m.ageGroup || "", status: m.status, joined: m.joined || "", sourceEventId: m.sourceEventId || "", photo: m.photo || null, birthday: m.birthday || "", anniversary: m.anniversary || "" });
+    setForm({ name: m.name, contact: m.contact, email: m.email || "", gender: m.gender || "", ministry: splitMinistries(m.ministry), ageGroup: m.ageGroup || "", attendanceGroup: m.attendanceGroup || "Attendee", status: m.status, joined: m.joined || "", sourceEventId: m.sourceEventId || "", photo: m.photo || null, birthday: m.birthday || "", anniversary: m.anniversary || "" });
     setShowModal(true);
   };
 
@@ -242,7 +248,7 @@ function MembersView({ members, setMembers, events, theme, showNotif, currentUse
       setMembers(prev => prev.map(m => m.id === before.id ? after : m));
       showNotif("Member updated");
       try {
-        const fieldsToTrack = ["name", "contact", "email", "gender", "ministry", "ageGroup", "status", "joined", "sourceEventId", "birthday", "anniversary"];
+        const fieldsToTrack = ["name", "contact", "email", "gender", "ministry", "ageGroup", "attendanceGroup", "status", "joined", "sourceEventId", "birthday", "anniversary"];
         const changedFields = fieldsToTrack
           .map((field) => {
             const beforeVal = field === "ministry" ? formatMinistry(before[field]) : (before[field] ?? "");
@@ -287,7 +293,7 @@ function MembersView({ members, setMembers, events, theme, showNotif, currentUse
           },
         });
       } catch {}
-      setForm({ name: "", contact: "", email: "", gender: "", ministry: [], ageGroup: "", status: "Active", joined: "", sourceEventId: "", photo: null, birthday: "", anniversary: "" });
+      setForm({ name: "", contact: "", email: "", gender: "", ministry: [], ageGroup: "", attendanceGroup: "Attendee", status: "Active", joined: "", sourceEventId: "", photo: null, birthday: "", anniversary: "" });
     }
     if (editMember) setShowModal(false);
   };
@@ -518,6 +524,14 @@ function MembersView({ members, setMembers, events, theme, showNotif, currentUse
           </select>
         </div>
         <div style={{ minWidth: 160 }}>
+          <label style={{ display: "block", fontSize: 12, color: theme.textMuted, marginBottom: 6 }}>Attendance Group</label>
+          <select value={filterAttendanceGroup} onChange={e => setFilterAttendanceGroup(e.target.value)}>
+            <option value="All">All Groups</option>
+            <option value="Church Leader">Church Leaders</option>
+            <option value="Attendee">Attendees</option>
+          </select>
+        </div>
+        <div style={{ minWidth: 160 }}>
           <label style={{ display: "block", fontSize: 12, color: theme.textMuted, marginBottom: 6 }}>Joined From</label>
           <input type="date" value={filterJoinedFrom} onChange={e => setFilterJoinedFrom(e.target.value)} />
         </div>
@@ -544,7 +558,7 @@ function MembersView({ members, setMembers, events, theme, showNotif, currentUse
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
           <button
             className="btn"
-            onClick={() => { setFilterMinistry("All"); setFilterAgeGroup("All"); setFilterJoinedFrom(""); setFilterJoinedTo(""); }}
+            onClick={() => { setFilterMinistry("All"); setFilterAgeGroup("All"); setFilterAttendanceGroup("All"); setFilterJoinedFrom(""); setFilterJoinedTo(""); }}
             style={{ background: theme.surface2, color: theme.textMuted, padding: "8px 14px", borderRadius: 8, fontSize: 13, border: `1px solid ${theme.border}`, display: "flex", alignItems: "center", gap: 6 }}
             title="Clear filters"
           >
@@ -558,7 +572,7 @@ function MembersView({ members, setMembers, events, theme, showNotif, currentUse
 
       <div className="card table-scroll" style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 13, overflow: "hidden" }}>
         <table>
-          <thead><tr><th>ID</th><th>Name</th><th>Contact</th><th>Ministry</th><th>Age Group</th><th>Status</th><th>Joined</th><th>Actions</th></tr></thead>
+          <thead><tr><th>ID</th><th>Name</th><th>Contact</th><th>Ministry</th><th>Age Group</th><th>Attendance Group</th><th>Status</th><th>Joined</th><th>Actions</th></tr></thead>
           <tbody>
             {visible.map(m => (
               <tr key={m.id}>
@@ -574,6 +588,7 @@ function MembersView({ members, setMembers, events, theme, showNotif, currentUse
                 <td style={{ color: theme.textMuted, fontSize: 13 }}>{m.contact || "—"}</td>
                 <td style={{ color: theme.textMuted, fontSize: 13 }}>{formatMinistry(m.ministry) || "—"}</td>
                 <td style={{ color: theme.textMuted, fontSize: 13 }}>{m.ageGroup || "—"}</td>
+                <td><span className="badge" style={{ background: (m.attendanceGroup === "Church Leader" ? theme.accent : theme.success) + "18", color: m.attendanceGroup === "Church Leader" ? theme.accent : theme.success }}>{m.attendanceGroup || "Attendee"}</span></td>
                 <td><span className={`badge tag-${m.archived ? "archived" : m.status.toLowerCase()}`}>{m.archived ? "Archived" : m.status}</span></td>
                 <td style={{ color: theme.textMuted, fontSize: 12 }}>{formatJoinedForDisplay(m.joined) || "—"}</td>
                 <td>
@@ -689,6 +704,13 @@ function MembersView({ members, setMembers, events, theme, showNotif, currentUse
                 <label>Status</label>
                 <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
                   <option>Active</option><option>Inactive</option>
+                </select>
+              </div>
+              <div>
+                <label>Attendance Group</label>
+                <select value={form.attendanceGroup} onChange={e => setForm(f => ({ ...f, attendanceGroup: e.target.value }))}>
+                  <option value="Attendee">Attendee</option>
+                  <option value="Church Leader">Church Leader</option>
                 </select>
               </div>
               <div style={{ gridColumn: "1 / -1" }}>
